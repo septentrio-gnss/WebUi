@@ -1,6 +1,6 @@
-# SeptenUI
+# WebUI
 
-**SeptenUI** is a universal, web-based interface designed to monitor, configure, and control **Septentrio mosaic-g5** GNSS receivers. 
+**WebUI** is a universal, web-based interface designed to monitor, configure, and control **Septentrio mosaic-g5** GNSS receivers. 
 
 This project runs on an **ESP32-S3** microcontroller, acting as a bridge between the high-precision GNSS module and the user. It removes the need for proprietary desktop software for field operations, offering a responsive HTML5 dashboard accessible from any browser (PC, Mobile, Tablet).
 
@@ -21,7 +21,7 @@ This project runs on an **ESP32-S3** microcontroller, acting as a bridge between
 
 ##  Project Overview
 
-Developed as an internship project at Septentrio, **SeptenUI** demonstrates the capabilities of the **mosaic-g5** module when paired with modern IoT hardware. 
+Developed as an internship project at Septentrio, **WebUI** demonstrates the capabilities of the **mosaic-g5** module when paired with modern IoT hardware. 
 
 The system operates as a standalone web server. It parses binary SBF (Septentrio Binary Format) data in real-time to display precise positioning metrics, while simultaneously handling NTRIP corrections and Bluetooth relaying.
 
@@ -106,7 +106,7 @@ The web interface files (`index.html`, `style.css`, `chart.js`) are stored in th
 This section provides a detailed breakdown of every interface component, explaining the data sources and control mechanisms.
 
 ### 1. Dashboard View
-The Dashboard is the mission control center of SeptenUI. It aggregates real-time data parsed from the mosaic-g5's binary SBF stream (10Hz update rate).
+The Dashboard is the mission control center of WebUI. It aggregates real-time data parsed from the mosaic-g5's binary SBF stream (10Hz update rate).
 
 #### **A. Status Bar (Top)**
 Located at the top of the interface, this bar provides instant system health feedback:
@@ -164,7 +164,7 @@ The Expert Console provides direct, low-level access to the receiver's command i
 ---
 
 ### 3. Logging Control
-**SeptenUI** allows you to manage data recording remotely.
+**WebUI** allows you to manage data recording remotely.
 * **Storage Location:** IMPORTANT - Data is logged directly to the **mosaic-g5's internal SD Card**, ensuring high-speed write performance without network bottlenecks.
 * **SBF Logging:**
     * **Filter:** Specify which blocks to log (e.g., `PVTGeodetic,MeasEpoch`). Leave empty to log all.
@@ -264,7 +264,7 @@ While functional, the code has room for optimization:
 ## Technical Implementation
 
 ### 1. Software Foundation: The Eridano Legacy
-The GNSS driver logic is an evolution of the **Eridano** library, originally developed internally at Septentrio. For the **SeptenUI** project, this library underwent significant refactoring to support hybrid operation (SBF + NMEA + NTRIP).
+The GNSS driver logic is an evolution of the **Eridano** library, originally developed internally at Septentrio. For the **WebUI** project, this library underwent significant refactoring to support hybrid operation (SBF + NMEA + NTRIP).
 
 **Key Refactoring & Modifications:**
 * **`Septentrio_Arduino_driver.cpp` / `.h`:**
@@ -338,7 +338,7 @@ The system specifically filters and decodes the following Septentrio Binary Form
 **Symptom:** After uploading new code to the ESP32, the mosaic-g5 stops outputting data and enters "Software Upgrade Fallback" (SUF) mode for 200 seconds.
 **Cause:** In the current wiring configuration, the ESP32's `RESET` pin is tied to the mosaic-g5's `nRST/UPGRADE` pin. Flashing the ESP32 toggles this pin, inadvertently triggering the receiver's upgrade mode.
 **Solutions:**
-1.  **Soft Fix:** Open the **Expert Console** in SeptenUI, type the command `reset`, and press Enter. This forces the receiver to reboot into normal mode immediately. Then, refresh the webpage.
+1.  **Soft Fix:** Open the **Expert Console** in WebUI, type the command `reset`, and press Enter. This forces the receiver to reboot into normal mode immediately. Then, refresh the webpage.
 2.  **Hard Fix:** Physically disconnect the wire between the ESP32 Reset pin and the mosaic-g5 Upgrade pin if remote flashing is not required.
 
 ### C. Advanced Debugging
@@ -353,4 +353,4 @@ The firmware contains extensive serial logging for debugging purposes.
 This project was built based on the extensive documentation provided by Septentrio. For deeper technical explanations regarding SBF block structures, specific command definitions (SDS), or GNSS theory, please refer to the official guides:
 
 1.  **mosaic-g5 Reference Guide:** Essential for understanding the low-level binary SBF blocks (e.g., `PVTGeodetic`, `QualityInd`) and the command line interface (CLI) syntax used in the Expert Console.
-2.  **RxControl Manual:** The logic for parsing signals, visualising skyplots, and managing connection streams in **SeptenUI** was heavily inspired by the workflows standard in Septentrio's RxControl software.
+2.  **RxControl Manual:** The logic for parsing signals, visualising skyplots, and managing connection streams in **WebUI** was heavily inspired by the workflows standard in Septentrio's RxControl software.
