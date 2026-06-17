@@ -1,0 +1,104 @@
+#######################################
+# Syntax Coloring Map
+#######################################
+
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+
+SEPTENTRIO_GNSS KEYWORD1
+SEPTENTRIO_NTRIP KEYWORD1
+
+tempBuffer_t KEYWORD1
+sbfBuffer_t KEYWORD1
+nmeaBuffer_t KEYWORD1
+tempBuffer_t KEYWORD1
+ntripTempBuffer KEYWORD1
+ntripBuffer_t KEYWORD1
+ntripProperties_t KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+
+begin KEYWORD2
+isConnected KEYWORD2
+canSendCommand KEYWORD2
+checkCommandResponse KEYWORD2
+enableSBF KEYWORD2
+disableSBF KEYWORD2
+
+u2Conv KEYWORD2
+u4Conv KEYWORD2
+u8Conv KEYWORD2
+i2Conv KEYWORD2
+i4Conv KEYWORD2
+i8Conv KEYWORD2
+f4Conv KEYWORD2
+f8Conv KEYWORD2
+
+isSBFValid KEYWORD2
+checkId KEYWORD2
+checkCRC KEYWORD2
+checkChecksum KEYWORD2
+checkId KEYWORD2
+checkCustomId KEYWORD2
+correctFloat KEYWORD2
+fillBuffer KEYWORD2
+checkNewByte KEYWORD2
+fullBuffer KEYWORD2
+fillSBFProperties KEYWORD2
+
+resetNtripMsg
+createRequestMsg
+requestMsgVer1
+requestMsgVer2
+processAnswer
+processHeaderVer1
+processHeaderVer2
+getContentType
+getTransferEncoding
+getContentLengh
+extractSentence
+processSourcetable
+processCAS
+processNET
+processSTR
+casterRequirement
+rtpConnectToCasterMsg
+rtpStartTransferToCastersMsg
+rtpEndTransferToCasterMsg
+
+enableDebug KEYWORD2
+disableDebug KEYWORD2
+
+#######################################
+# Structures (KEYWORD3)
+#######################################
+
+tempBuffer KEYWORD3
+NMEABuffer KEYWORD3
+SBFBuffer KEYWORD3
+
+ntripRequestBuffer KEYWORD3
+ntripTempBuffer KEYWORD3
+ntripBuffer KEYWORD3
+ntripProperties KEYWORD3
+
+#######################################
+# Constants (LITERAL1)
+#######################################
+
+headerSize LITERAL1
+cmdMaxSize LITERAL1
+nmeaMaxSize LITERAL1
+ntripHeaderMaxSize LITERAL1
+requestStandardMaxSize LITERAL1
+RequestAuthMaxSize LITERAL1
+RequestCustomMaxSize LITERAL1
+
+doNotUseTOW LITERAL1
+doNotUseLong LITERAL1
+doNotUseInt LITERAL1
+doNotUseFloat LITERAL1
+maxVersion LITERAL1
