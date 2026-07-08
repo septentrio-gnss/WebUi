@@ -46,7 +46,7 @@ void broadcastJson(String &output) {
 }
 
 void broadcastNtripStatus() {
-    StaticJsonDocument<256> doc;
+    JsonDocument doc;
     doc["type"] = "status";
     doc["connected"] = ntrip.isConnected();
 
@@ -56,7 +56,7 @@ void broadcastNtripStatus() {
 }
 
 void broadcastRtcm(const String& rtcmStatus) {
-    StaticJsonDocument<256> doc;
+    JsonDocument doc;
     doc["type"] = "rtcm";
     doc["data"] = rtcmStatus;
 
@@ -68,7 +68,7 @@ void broadcastRtcm(const String& rtcmStatus) {
 void broadcastReplyToConsole(const String& reply) {
     if (reply.length() == 0) return;
 
-    StaticJsonDocument<512> doc;
+    JsonDocument doc;
     doc["type"] = "raw_receiver_data";
     doc["data"] = reply;
 
@@ -78,7 +78,7 @@ void broadcastReplyToConsole(const String& reply) {
 }
 
 void sendWifiStatus() {
-    StaticJsonDocument<256> doc;
+    JsonDocument doc;
     doc["type"] = "wifi_status";
     doc["connected"] = (WiFi.status() == WL_CONNECTED);
 
@@ -88,7 +88,7 @@ void sendWifiStatus() {
 }
 
 void sendLoggingStatus(uint8_t num) {
-    StaticJsonDocument<256> doc;
+    JsonDocument doc;
     doc["type"] = "logging_status";
     doc["enabled"] = isLogging;
 
@@ -112,7 +112,7 @@ void sendLoggingStatus(uint8_t num) {
 }
 
 void sendJammingStatus() {
-    StaticJsonDocument<256> doc;
+    JsonDocument doc;
     doc["type"] = "jamming_status";
     doc["filters_on"] = currentJammingFiltersOn;
 
@@ -122,7 +122,7 @@ void sendJammingStatus() {
 }
 
 void sendCurrentPositionModes() {
-    StaticJsonDocument<256> doc;
+    JsonDocument doc;
     doc["type"] = "current_pos_modes";
 
     JsonArray modes = doc["modes"].to<JsonArray>();
@@ -135,7 +135,7 @@ void sendCurrentPositionModes() {
 }
 
 void sendStatusUpdate() {
-    StaticJsonDocument<512> doc;
+    JsonDocument doc;
     doc["type"] = "full_status";
     doc["wifi_connected"] = (WiFi.status() == WL_CONNECTED);
     doc["ntrip_connected"] = ntrip.isConnected();
@@ -153,7 +153,7 @@ void sendStatusUpdate() {
 }
 
 static void sendCurrentConfig(uint8_t num) {
-    StaticJsonDocument<512> cfgDoc;
+    JsonDocument cfgDoc;
 
     cfgDoc["type"] = "current_config";
     cfgDoc["wifi_ssid"] = WIFI_SSID;
@@ -186,7 +186,9 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
             IPAddress ip = webSocket.remoteIP(num);
             Serial.printf("[%u] WS Connection from %s\n", num, ip.toString().c_str());
 
-            startRequiredReceiverStreams();
+            // startRequiredReceiverStreams(); 
+            // Removed from WebSocket connection to avoid reconfiguring receiver streams
+            // while GNSS startup is handled by the Core0 background task.
 
             broadcastNtripStatus();
             sendWifiStatus();
@@ -198,7 +200,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         }
 
         case WStype_TEXT: {
-            StaticJsonDocument<1024> doc;
+            JsonDocument doc;
             DeserializationError error = deserializeJson(doc, payload, length);
 
             if (error) {
@@ -268,7 +270,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
 
                 Serial.println("NTRIP saved.");
 
-                StaticJsonDocument<256> ackDoc;
+                JsonDocument ackDoc;
                 ackDoc["type"] = "config_ack";
                 ackDoc["message"] = "NTRIP configuration saved!";
 
@@ -337,7 +339,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
 
                 updateBluetoothState(wantEnabled);
 
-                StaticJsonDocument<256> ack;
+                JsonDocument ack;
                 ack["type"] = "config_ack";
                 ack["message"] = wantEnabled ? "Bluetooth ON (Visible)" : "Bluetooth OFF (Hidden)";
 

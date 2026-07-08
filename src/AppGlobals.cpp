@@ -8,6 +8,7 @@ String NTRIP_USER = "";
 String NTRIP_PASS = "";
 
 int NTRIP_PORT = 2101;
+bool NTRIP_AUTO_CONNECT = true;
 bool WIFI_STA_ENABLED = false;
 bool BLUETOOTH_ENABLED = false;
 
@@ -50,3 +51,9 @@ bool systemWarning = false;
 unsigned long lastStatusUpdateTime = 0;
 
 std::map<uint8_t, SatelliteInfo> skyplotData;
+
+volatile bool gnssSerialReady = false;
+volatile bool receiverStreamsReady = false;
+
+volatile bool bleInitStarted = false;
+volatile bool bleReady = false;

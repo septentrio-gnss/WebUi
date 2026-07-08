@@ -72,6 +72,7 @@ extern String NTRIP_USER;
 extern String NTRIP_PASS;
 
 extern int NTRIP_PORT;
+extern bool NTRIP_AUTO_CONNECT;
 extern bool WIFI_STA_ENABLED;
 extern bool BLUETOOTH_ENABLED;
 
@@ -150,3 +151,9 @@ struct SatelliteInfo {
 };
 
 extern std::map<uint8_t, SatelliteInfo> skyplotData;
+
+extern volatile bool gnssSerialReady;
+extern volatile bool receiverStreamsReady;
+
+extern volatile bool bleInitStarted;
+extern volatile bool bleReady;

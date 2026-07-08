@@ -1,8 +1,8 @@
 /*
  * Authors:
- * - Ariel Kriss Sany
  * - Adham Ali
- *
+ * - Ariel Kriss Sany
+ * 
  * Dualy WebUI Project - Modular ESP32 Firmware
  */
 
@@ -25,18 +25,62 @@
 #include "utils/BootProfiler.h"
 
 TaskHandle_t Core0Task;
+TaskHandle_t BleInitTaskHandle = NULL;
 
 void Core0Loop(void * pvParameters) {
-    BOOT_LOG("Core0 task started");
+    BOOT_LOG("Core0 receiver task started");
     Serial.println("Task on Core 0 started.");
+
+    // ============================================================
+    // GNSS BACKGROUND STARTUP
+    // This no longer blocks the WebUI startup path.
+    // ============================================================
+
+    BOOT_LOG("GNSS background startup started");
+
+    BOOT_LOG("Initializing GNSS Serial2 and Septentrio libraries");
+    initGnss();
+    gnssSerialReady = true;
+    BOOT_LOG("GNSS/NTRIP libraries initialized");
+
+    BOOT_LOG("Receiver stabilization delay started in background");
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    BOOT_LOG("Receiver stabilization delay finished in background");
+
+    BOOT_LOG("Requesting required SBF/NMEA receiver streams in background");
+    startRequiredReceiverStreams();
+    receiverStreamsReady = true;
+    BOOT_LOG("Required SBF/NMEA streams requested in background");
+
+    BOOT_LOG("GNSS background startup complete");
+
+    // ============================================================
+    // RUNTIME LOOP
+    // ============================================================
 
     for (;;) {
         handleSerialParsing();
         handleConsoleFlush();
-        handleBleStatusLog();
+        if (bleReady) { //This avoids calling BLE-related logic before BLE is initialized.
+            handleBleStatusLog();
+        }
+        if (currentMode == MODE_INTERNAL_NTRIP && receiverStreamsReady) {
+            static bool firstNtripRuntimeLogged = false;
 
-        if (currentMode == MODE_INTERNAL_NTRIP) {
+            if (!firstNtripRuntimeLogged) {
+                BOOT_LOG("NTRIP runtime loop enabled in background");
+                firstNtripRuntimeLogged = true;
+            }
+
+            unsigned long ntripStart = millis();
+
             handleInternalNtrip();
+
+            unsigned long ntripDuration = millis() - ntripStart;
+
+            if (ntripDuration > 100) {
+                Serial.printf("[NTRIP WARNING] handleInternalNtrip() took %lu ms\n", ntripDuration);
+            }
         }
 
         vTaskDelay(pdMS_TO_TICKS(1));
@@ -62,6 +106,25 @@ void printHeartbeat() {
     }
 }
 
+void BleInitTask(void *pvParameters) {
+    BOOT_LOG("BLE init background task started");
+
+    /*
+     * Small delay to let setup() finish and let the WebUI loop become active.
+     * BLE is useful, but it is not required to display the WebUI.
+     */
+    vTaskDelay(pdMS_TO_TICKS(500));
+
+    bleInitStarted = true;
+
+    BOOT_LOG("BLE initialization started in background");
+    initBle();
+    bleReady = true;
+    BOOT_LOG("BLE initialization finished in background");
+
+    vTaskDelete(NULL);
+}
+
 void setup() {
     WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
 
@@ -72,10 +135,11 @@ void setup() {
     BOOT_LOG("Boot started");
     BOOT_LOG("Serial monitor ready");
 
-    BOOT_LOG("Starting LED drivers");
-    initLedDrivers();
-    setBootLedPattern();
-    BOOT_LOG("LED drivers initialized");
+    // ============================================================
+    // WEBUI CRITICAL PATH
+    // ============================================================
+
+    BOOT_LOG("WEBUI CRITICAL PATH START");
 
     BOOT_LOG("Creating WebSocket mutex");
     initWebSocketMutex();
@@ -89,10 +153,6 @@ void setup() {
     loadCredentials();
     BOOT_LOG("Credentials loaded");
 
-    BOOT_LOG("Initializing BLE");
-    initBle();
-    BOOT_LOG("BLE initialized");
-
     BOOT_LOG("Starting WiFi AP / STA / mDNS");
     initWiFiAndMdns();
     BOOT_LOG("WiFi AP / STA / mDNS initialized");
@@ -105,19 +165,27 @@ void setup() {
     initWebSocketServer();
     BOOT_LOG("WebSocket server started");
 
-    BOOT_LOG("Initializing GNSS Serial2 and Septentrio libraries");
-    initGnss();
-    BOOT_LOG("GNSS/NTRIP libraries initialized");
+    BOOT_LOG("WEBUI CRITICAL PATH READY");
 
-    BOOT_LOG("Receiver stabilization delay started");
-    delay(1000);
-    BOOT_LOG("Receiver stabilization delay finished");
+    BOOT_LOG("Creating delayed STA task");
+    // xTaskCreatePinnedToCore(
+    //     delayedStaTask,
+    //     "DelayedStaTask",
+    //     6000,
+    //     NULL,
+    //     1,
+    //     NULL,
+    //     1
+    // );
+    BOOT_LOG("Delayed STA task created");
 
-    BOOT_LOG("Requesting required SBF/NMEA receiver streams");
-    startRequiredReceiverStreams();
-    BOOT_LOG("Required SBF/NMEA streams requested");
+    // ============================================================
+    // BACKGROUND RECEIVER TASK
+    // GNSS startup is now moved out of setup().
+    // ============================================================
 
     BOOT_LOG("Creating Core0 receiver task");
+
     xTaskCreatePinnedToCore(
         Core0Loop,
         "Core0Loop",
@@ -127,7 +195,37 @@ void setup() {
         &Core0Task,
         0
     );
+
     BOOT_LOG("Core0 receiver task created");
+
+    // ============================================================
+    // POST-WEBUI SERVICES
+    // These are still after WebUI.
+    // BLE can be moved to its own task in Task 6.
+    // ============================================================
+
+    BOOT_LOG("POST-WEBUI SERVICES START");
+
+    BOOT_LOG("Starting LED drivers");
+    initLedDrivers();
+    setBootLedPattern();
+    BOOT_LOG("LED drivers initialized");
+
+    BOOT_LOG("Creating BLE init background task");
+
+    xTaskCreatePinnedToCore(
+        BleInitTask,
+        "BleInitTask",
+        8192,
+        NULL,
+        1,
+        &BleInitTaskHandle,
+        1
+    );
+
+    BOOT_LOG("BLE init background task created");
+
+    BOOT_LOG("POST-WEBUI SERVICES DONE");
 
     BOOT_LOG("Setup complete - main loop starting");
     Serial.println("===== Setup complete. Running main loop. =====");

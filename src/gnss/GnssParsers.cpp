@@ -20,7 +20,7 @@ void parseAndBroadcastPVT() {
     uint8_t satsInSolution = (uint8_t)gnss.u2Conv(&gnss.SBFBuffer, 70);
     bool pvtValid = (finalFixCode != 0);
 
-    StaticJsonDocument<256> posDoc;
+    JsonDocument posDoc;
     posDoc["type"] = "gga_update";
     posDoc["fix"] = finalFixCode;
     posDoc["valid"] = pvtValid;
@@ -55,7 +55,7 @@ void parseAndBroadcastPVT() {
     serializeJson(posDoc, posOutput);
     broadcastJson(posOutput);
 
-    StaticJsonDocument<256> velDoc;
+    JsonDocument velDoc;
     velDoc["type"] = "vel_update";
     velDoc["valid"] = pvtValid;
 
@@ -80,7 +80,7 @@ void parseAndBroadcastPVT() {
 }
 
 void parseAndBroadcastVelCov() {
-    StaticJsonDocument<256> doc;
+    JsonDocument doc;
     doc["type"] = "velcov_update";
 
     float covVxVx = gnss.f4Conv(&gnss.SBFBuffer, 16);
@@ -97,7 +97,7 @@ void parseAndBroadcastVelCov() {
 }
 
 void parseAndBroadcastAttitude() {
-    StaticJsonDocument<256> doc;
+    JsonDocument doc;
     doc["type"] = "att_update";
     doc["heading"] = gnss.f4Conv(&gnss.SBFBuffer, 20);
     doc["pitch"]   = gnss.f4Conv(&gnss.SBFBuffer, 24);
@@ -109,7 +109,7 @@ void parseAndBroadcastAttitude() {
 }
 
 void parseAndBroadcastPosCov() {
-    StaticJsonDocument<256> doc;
+    JsonDocument doc;
     doc["type"] = "poscov_update";
 
     float covLatLat = gnss.f4Conv(&gnss.SBFBuffer, 16);
@@ -126,7 +126,7 @@ void parseAndBroadcastPosCov() {
 }
 
 void parseAndBroadcastAttCov() {
-    StaticJsonDocument<256> doc;
+    JsonDocument doc;
     doc["type"] = "attcov_update";
 
     float covHeadHead   = gnss.f4Conv(&gnss.SBFBuffer, 16);
@@ -151,7 +151,7 @@ void parseAndBroadcastQuality() {
     }
     uint8_t numIndicators = (uint8_t)gnss.u2Conv(&gnss.SBFBuffer, 14);
 
-    StaticJsonDocument<512> doc;
+    JsonDocument doc;
     doc["type"] = "quality_update";
 
     int overall = -1;
@@ -256,7 +256,7 @@ void parseAndBroadcastReceiverStatus() {
     systemCriticalError = criticalError;
     systemWarning = receiverWarning;
 
-    StaticJsonDocument<256> doc;
+    JsonDocument doc;
     doc["type"] = "system_status";
     doc["error"] = criticalError;
     doc["warning"] = receiverWarning;
@@ -372,7 +372,7 @@ void parseAndBroadcastChannelStatus() {
 }
 
 void broadcastFullSkyplot() {
-    StaticJsonDocument<1024> doc;
+    JsonDocument doc;
     doc["type"] = "gsv_update";
 
     JsonArray sats = doc["sats"].to<JsonArray>();
@@ -409,7 +409,7 @@ void parseAndBroadcastDOP() {
         BOOT_LOG("First DOP block parsed - precision indicators available");
         firstDopLogged = true;
     }
-    StaticJsonDocument<256> doc;
+    JsonDocument doc;
     doc["type"] = "dop_update";
     doc["pdop"] = gnss.u2Conv(&gnss.SBFBuffer, 16) * 0.01;
     doc["tdop"] = gnss.u2Conv(&gnss.SBFBuffer, 18) * 0.01;
@@ -422,7 +422,7 @@ void parseAndBroadcastDOP() {
 }
 
 void parseAndBroadcastTime() {
-    StaticJsonDocument<256> doc;
+    JsonDocument doc;
     doc["type"] = "time_update";
     doc["year"]  = (int8_t)gnss.SBFBuffer.data[14];
     doc["month"] = (int8_t)gnss.SBFBuffer.data[15];

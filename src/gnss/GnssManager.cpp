@@ -17,7 +17,17 @@ void initGnss() {
 }
 
 void sendCommandToReceiver(const String& command) {
-    if (millis() - lastRtcmActivity < 5000) {
+    if (!gnssSerialReady) {
+        Serial.printf("[GNSS WARNING] Command ignored because GNSS Serial2 is not ready yet: %s\n", command.c_str());
+        return;
+    }
+
+    const unsigned long RTCM_RECENT_WINDOW_MS = 5000;
+    bool rtcmWasRecentlyActive =
+        (lastRtcmActivity != 0) && // Check if lastRtcmActivity has been set to avoid false positives on startup
+        ((millis() - lastRtcmActivity) < RTCM_RECENT_WINDOW_MS);
+
+    if (rtcmWasRecentlyActive) {
         Serial.println("INFO : RTCM recently active. Forcing receiver into command mode.");
         Serial2.print("SSSSSSSSSS");
         delay(50);

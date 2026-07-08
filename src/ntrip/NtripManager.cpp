@@ -2,6 +2,7 @@
 #include "AppGlobals.h"
 #include "websocket/WebSocketManager.h"
 #include "utils/BootProfiler.h"
+#include <WiFi.h>
 
 void fetchAndSendMountpoints(const String& host, int port) {
     WiFiClient client;
@@ -9,7 +10,7 @@ void fetchAndSendMountpoints(const String& host, int port) {
     Serial.printf("Fetching sourcetable from %s:%d\n", host.c_str(), port);
 
     auto sendEmptyList = []() {
-        StaticJsonDocument<256> doc;
+        JsonDocument doc;
         doc["type"] = "mountpoints_list";
         doc["data"].to<JsonArray>();
 
@@ -39,7 +40,7 @@ void fetchAndSendMountpoints(const String& host, int port) {
         delay(10);
     }
 
-    StaticJsonDocument<1024> doc;
+    JsonDocument doc;
     doc["type"] = "mountpoints_list";
 
     JsonArray mountpoints = doc["data"].to<JsonArray>();
@@ -79,39 +80,73 @@ void fetchAndSendMountpoints(const String& host, int port) {
 }
 
 void handleInternalNtrip() {
+    static unsigned long lastConnectAttempt = 0;
+    static bool wasConnected = false;
+
+    if (!gnssSerialReady || !receiverStreamsReady) {
+        return;
+    }
+
     if (ntripUserRequestConnect && !ntrip.isConnected()) {
+        if (WiFi.status() != WL_CONNECTED) {
+            static unsigned long lastNoWifiLog = 0;
+
+            if (millis() - lastNoWifiLog > 5000) {
+                Serial.println("[NTRIP] Waiting for WiFi STA connection before NTRIP connect...");
+                lastNoWifiLog = millis();
+            }
+
+            return;
+        }
+
+        if (millis() - lastConnectAttempt < 10000) {
+            return;
+        }
+
+        lastConnectAttempt = millis();
+
         static bool firstNtripAttemptLogged = false;
 
         if (!firstNtripAttemptLogged) {
             BOOT_LOG("First NTRIP connection attempt");
             firstNtripAttemptLogged = true;
         }
-        Serial.println("Loop: Req NTRIP connect...");
+
+        Serial.printf("[NTRIP] Connecting to %s:%d / %s...\n",
+                      NTRIP_HOST.c_str(),
+                      NTRIP_PORT,
+                      NTRIP_MOUNT.c_str());
 
         if (!ntrip.connect(NTRIP_HOST, NTRIP_PORT, NTRIP_MOUNT, NTRIP_USER, NTRIP_PASS)) {
-            ntripUserRequestConnect = false;
-            Serial.println("Loop: NTRIP connect failed.");
+            Serial.println("[NTRIP] Connect failed. Keeping auto-connect request active; retry in 10 s.");
+            broadcastNtripStatus();
+            return;
         }
 
+        Serial.println("[NTRIP] Connected.");
+        wasConnected = true;
         broadcastNtripStatus();
     }
 
-    size_t rtcmBytes = ntrip.loop();
+    if (ntrip.isConnected()) {
+        size_t rtcmBytes = ntrip.loop();
 
-    if (rtcmBytes > 0) {
-        static bool firstRtcmLogged = false;
+        if (rtcmBytes > 0) {
+            static bool firstRtcmLogged = false;
 
-        if (!firstRtcmLogged) {
-            BOOT_LOG("First RTCM bytes received from NTRIP");
-            firstRtcmLogged = true;
+            if (!firstRtcmLogged) {
+                BOOT_LOG("First RTCM bytes received from NTRIP");
+                firstRtcmLogged = true;
+            }
+
+            broadcastRtcm("[RTCM via WiFi] " + String(rtcmBytes) + " bytes Rx.");
+            lastRtcmActivity = millis();
         }
-        broadcastRtcm("[RTCM via WiFi] " + String(rtcmBytes) + " bytes Rx.");
-        lastRtcmActivity = millis();
     }
 
-    if (ntripUserRequestConnect && !ntrip.isConnected()) {
-        Serial.println("Loop: NTRIP socket closed.");
-        ntripUserRequestConnect = false;
+    if (wasConnected && ntripUserRequestConnect && !ntrip.isConnected()) {
+        Serial.println("[NTRIP] Socket closed. Auto-connect request remains active; retry will continue.");
+        wasConnected = false;
         broadcastNtripStatus();
     }
 }
