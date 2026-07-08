@@ -207,10 +207,7 @@ void initHttpServer() {
 }
 
 void delayedStaTask(void *parameter) {
-    BOOT_LOG("STA background task started");
-
-    // Give user enough time to connect to AP and open WebUI before STA changes WiFi behavior.
-    vTaskDelay(pdMS_TO_TICKS(8000));
+    BOOT_LOG("STA task started after WebUI request");
 
     if (!WIFI_STA_ENABLED || WIFI_SSID.length() == 0) {
         Serial.println("[STA] Not started: WiFi client disabled or SSID missing.");
@@ -218,33 +215,26 @@ void delayedStaTask(void *parameter) {
         return;
     }
 
-    BOOT_LOG("Starting STA WiFi connection in background");
+    BOOT_LOG("Starting STA WiFi connection");
 
     WiFi.persistent(false);
-
-    // IMPORTANT:
-    // ESP32-S3 crashes if WiFi sleep is disabled while BLE is active.
-    // Keep modem sleep enabled when WiFi + BLE coexist.
     WiFi.setSleep(true);
-
     WiFi.setAutoReconnect(true);
 
     Serial.printf("[STA] Before AP_STA | AP SSID: %s | AP IP: %s | AP clients: %d | channel: %d\n",
-              WiFi.softAPSSID().c_str(),
-              WiFi.softAPIP().toString().c_str(),
-              WiFi.softAPgetStationNum(),
-              WiFi.channel());
+                  WiFi.softAPSSID().c_str(),
+                  WiFi.softAPIP().toString().c_str(),
+                  WiFi.softAPgetStationNum(),
+                  WiFi.channel());
 
-    // Keep the WebUI AP alive, then enable STA only after the WebUI is already available.
+    // Switch from pure AP to AP+STA only when requested from WebUI
     WiFi.mode(WIFI_AP_STA);
-    vTaskDelay(pdMS_TO_TICKS(200));
+    vTaskDelay(pdMS_TO_TICKS(500));
 
-    Serial.printf("[STA] AP still available | SSID: %s | IP: %s | channel: %d\n",
+    Serial.printf("[STA] AP_STA active | AP SSID: %s | AP IP: %s | channel: %d\n",
                   WiFi.softAPSSID().c_str(),
                   WiFi.softAPIP().toString().c_str(),
                   WiFi.channel());
-
-    //scanForConfiguredSsid();
 
     if (NTRIP_AUTO_CONNECT &&
         NTRIP_HOST.length() > 0 &&
@@ -254,9 +244,6 @@ void delayedStaTask(void *parameter) {
     } else {
         Serial.println("[NTRIP] Auto-connect not armed: missing NTRIP config.");
     }
-
-    WiFi.disconnect(false, false);
-    vTaskDelay(pdMS_TO_TICKS(200));
 
     Serial.printf("[STA] Connecting to SSID '%s'...\n", WIFI_SSID.c_str());
     WiFi.begin(WIFI_SSID.c_str(), WIFI_PASSWORD.c_str());
@@ -278,21 +265,15 @@ void delayedStaTask(void *parameter) {
     Serial.println();
 
     if (WiFi.status() == WL_CONNECTED) {
-        BOOT_LOG("STA WiFi connected in background");
+        BOOT_LOG("STA WiFi connected");
         Serial.print("[STA] Connected. STA IP: ");
         Serial.println(WiFi.localIP());
         Serial.printf("[STA] Connected channel: %d | RSSI: %d dBm\n", WiFi.channel(), WiFi.RSSI());
-
-        if (ntripUserRequestConnect) {
-            Serial.println("[NTRIP] Auto-connect request already active after STA connection.");
-        } else {
-            Serial.println("[NTRIP] Auto-connect skipped: missing NTRIP config.");
-        }
     } else {
         Serial.printf("[STA] Connection failed. Final status: %d (%s)\n",
                       WiFi.status(),
                       wifiStatusToText(WiFi.status()));
-        Serial.println("[STA] AP remains available. WebUI stays reachable for configuration/debug.");
+        Serial.println("[STA] AP should remain available.");
     }
 
     vTaskDelete(NULL);
