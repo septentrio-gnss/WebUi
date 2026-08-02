@@ -2,7 +2,7 @@
 
 <img src="docs/images/webui-logo.png" alt="WebUI Logo" width="360">
 
-# WebUI
+<!--# WebUI -->
 
 ### Open-Source GNSS Monitoring and Control Interface for ESP32
 
