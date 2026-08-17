@@ -8,6 +8,9 @@
 #include "logging/LoggingManager.h"
 #include "utils/BootProfiler.h"
 
+extern void delayedStaTask(void *parameter);
+static TaskHandle_t staTaskHandle = nullptr;
+
 void initWebSocketMutex() {
     webSocketMutex = xSemaphoreCreateMutex();
 
@@ -242,9 +245,48 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
             Serial.printf("[%u] Rx JSON: %s\n", num, msgType);
 
             if (strcmp(msgType, "fetch_mountpoints") == 0) {
-                if (!doc["host"].isNull() && !doc["port"].isNull()) {
-                    fetchAndSendMountpoints(doc["host"], doc["port"]);
+                String host = doc["host"] | "";
+                int port = doc["port"] | 0;
+                String user = doc["user"] | "";
+                String password = doc["pass"] | "";
+
+                host.trim();
+                user.trim();
+
+                if (host.isEmpty() || port <= 0 || port > 65535) {
+                    JsonDocument response;
+                    response["type"] = "mountpoints_list";
+                    response["success"] = false;
+                    response["message"] = "Invalid NTRIP host or port.";
+                    response["data"].to<JsonArray>();
+
+                    String output;
+                    serializeJson(response, output);
+                    webSocket.sendTXT(num, output);
+                    return;
                 }
+
+                if (WiFi.status() != WL_CONNECTED) {
+                    JsonDocument response;
+                    response["type"] = "mountpoints_list";
+                    response["success"] = false;
+                    response["message"] =
+                        "The ESP32 is not connected to an Internet Wi-Fi network.";
+                    response["data"].to<JsonArray>();
+
+                    String output;
+                    serializeJson(response, output);
+                    webSocket.sendTXT(num, output);
+                    return;
+                }
+
+                fetchAndSendMountpoints(
+                    num,
+                    host,
+                    port,
+                    user,
+                    password
+                );
             }
 
             else if (strcmp(msgType, "wifi_config") == 0) {
@@ -254,9 +296,35 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
 
                 saveCredentials();
 
-                Serial.println("WiFi saved. Rebooting...");
-                delay(1000);
-                ESP.restart();
+                Serial.println("[WIFI] Configuration saved.");
+
+                JsonDocument ack;
+                ack["type"] = "config_ack";
+                ack["message"] = "WiFi configuration saved. Connecting...";
+
+                String out;
+                serializeJson(ack, out);
+                webSocket.sendTXT(num, out);
+
+                if (WIFI_STA_ENABLED && WIFI_SSID.length() > 0) {
+                    BaseType_t taskResult = xTaskCreatePinnedToCore(
+                        delayedStaTask,
+                        "STA_Task",
+                        4096,
+                        NULL,
+                        1,
+                        &staTaskHandle,
+                        1
+                    );
+
+                    if (taskResult == pdPASS) {
+                        Serial.println("[WIFI] STA connection task started.");
+                    } else {
+                        Serial.println("[WIFI ERROR] Failed to create STA task.");
+                    }
+                } else {
+                    Serial.println("[WIFI] STA not started: disabled or SSID missing.");
+                }
             }
 
             else if (strcmp(msgType, "ntrip_config") == 0) {

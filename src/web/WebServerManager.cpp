@@ -1,6 +1,10 @@
 #include "web/WebServerManager.h"
 #include "AppGlobals.h"
 #include "utils/BootProfiler.h"
+#include "WebUIConfig.h"
+
+
+static TaskHandle_t staTaskHandle = nullptr;
 
 static const char* wifiStatusToText(wl_status_t status) {
     switch (status) {
@@ -65,50 +69,45 @@ void initFileSystem() {
 }
 
 void initWiFiAndMdns() {
-    WiFi.persistent(false);
-
-    // Clean any previous STA/AP state from the WiFi driver
-    WiFi.disconnect(true, true);
-    delay(300);
-
-    // Force pure Access Point mode only
-    WiFi.mode(WIFI_AP);
-    delay(300);
-
-    WiFi.setHostname("dualy-esp32");
+    WiFi.setHostname(WEBUI_HOSTNAME);
 
     IPAddress local_AP_IP(192, 168, 3, 1);
     IPAddress gateway(192, 168, 3, 1);
     IPAddress subnet(255, 255, 255, 0);
 
-    Serial.println("\nStarting PURE AP mode 'DUALY_CONFIG'...");
+    Serial.printf("\nStarting AP '%s'...\n", WEBUI_AP_SSID);
+
+    Serial.println("Mode: AP first, STA delayed in background");
+    WiFi.mode(WIFI_AP);
 
     if (!WiFi.softAPConfig(local_AP_IP, gateway, subnet)) {
-        Serial.println("Error: AP configuration failed!");
+        Serial.println("[WIFI ERROR] AP configuration failed.");
     }
 
-    bool apStarted = WiFi.softAP("DUALY_CONFIG", nullptr, 6, false, 4);
+    const bool apStarted =
+        WiFi.softAP(WEBUI_AP_SSID, nullptr, 6, false, 4);
 
-    delay(300);
+    Serial.printf("[WIFI] AP started: %s\n",
+                  apStarted ? "YES" : "NO");
 
-    Serial.printf("AP started: %s\n", apStarted ? "YES" : "NO");
+    Serial.printf("[WIFI] AP SSID: %s\n",
+                  WiFi.softAPSSID().c_str());
 
-    Serial.print("AP SSID: ");
-    Serial.println(WiFi.softAPSSID());
+    Serial.printf("[WIFI] AP IP: %s\n",
+                  WiFi.softAPIP().toString().c_str());
 
-    Serial.print("AP IP: ");
-    Serial.println(WiFi.softAPIP());
+    Serial.printf("[WIFI] AP channel: %d\n",
+                  WiFi.channel());
 
-    Serial.print("AP channel: ");
-    Serial.println(WiFi.channel());
+    if (MDNS.begin(WEBUI_MDNS_NAME)) {
+        Serial.printf("[WIFI] mDNS started: http://%s.local\n",
+                      WEBUI_MDNS_NAME);
 
-    Serial.println("PURE AP mode active. STA is disabled for AP recovery test.");
-
-    if (MDNS.begin("dualy")) {
-        Serial.println("mDNS started: http://dualy.local");
         MDNS.addService("http", "tcp", 80);
     } else {
-        Serial.println("mDNS Error. Direct IP still available: http://192.168.3.1");
+        Serial.println(
+            "[WIFI ERROR] mDNS failed. Use http://192.168.3.1"
+        );
     }
 }
 
@@ -247,6 +246,11 @@ void delayedStaTask(void *parameter) {
 
     Serial.printf("[STA] Connecting to SSID '%s'...\n", WIFI_SSID.c_str());
     WiFi.begin(WIFI_SSID.c_str(), WIFI_PASSWORD.c_str());
+
+    Serial.printf(
+        "[STA] Password configured: %s\n",
+        WIFI_PASSWORD.isEmpty() ? "NO" : "YES"
+    );
 
     unsigned long startAttempt = millis();
     unsigned long lastDiagnostic = 0;

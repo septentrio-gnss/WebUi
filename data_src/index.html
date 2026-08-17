@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>dualy - Septentrio Interface</title>
+    <title>WebUI - Septentrio Interface</title>
     <link href="style.css" rel="stylesheet">
     <script src="chart.js"></script>
     <style>
@@ -399,7 +399,7 @@
              <nav class="container mx-auto px-6">
                  <div class="flex items-center justify-between h-16">
                      <div class="flex items-center">
-                         <span class="font-bold text-2xl text-white">dual<span class="septentrio-orange">y</span></span>
+                         <span class="font-bold text-2xl text-white">Web<span class="septentrio-orange">UI</span></span>
                      </div>
                      <div class="flex space-x-1 sm:space-x-4 text-gray-300">
                          <a href="#dashboard" class="nav-link text-sm font-medium active">Dashboard</a>
@@ -1041,9 +1041,9 @@
             
             <div id="about" class="view hidden">
                  <div class="max-w-3xl mx-auto text-center">
-                    <h1 class="text-3xl font-bold text-gray-800">Project dual<span class="septentrio-orange">y</span></h1>
+                    <h1 class="text-3xl font-bold text-gray-800">Project Web<span class="septentrio-orange">UI</span></h1>
                     <div class="mt-6 p-6 data-box text-left">
-                         <p class="text-gray-700">dualy is an internship project developed at Septentrio. The primary goal is to create a generic, multi-platform web interface for the powerful mosaic-g5 p3h GNSS receiver module.</p>
+                         <p class="text-gray-700">WebUI is an internship project developed at Septentrio. The primary goal is to create a generic, multi-platform web interface for the powerful mosaic-g5 p3h GNSS receiver module.</p>
                          <p class="mt-4 text-gray-700">This interface allows configuration, command execution, and real-time monitoring of the receiver's status and position.</p>
                     </div>
                 </div>
@@ -1243,6 +1243,7 @@
             function initWebSocket() {
                 console.log('Trying to open WebSocket...');
                 websocket = new WebSocket(gateway);
+                window.websocket = websocket;
                 websocket.onopen    = onOpen;
                 websocket.onclose   = onClose;
                 websocket.onmessage = onMessage;
@@ -1349,7 +1350,29 @@
                         case 'rtcm':              updateConsole('rtcm-output', msg.data, ''); updateRtcmStreamStatus(true); break;
                         case 'config_ack':      showConfigStatus(msg.message, true); break;
                         case 'current_config':  populateConfigForms(msg); break;
-                        case 'mountpoints_list': populateMountpoints(msg.data); break;
+                        case 'mountpoints_list': {
+                            const fetchButton =
+                                document.getElementById('fetch-mountpoints-btn');
+
+                            if (fetchButton) {
+                                fetchButton.disabled = false;
+                                fetchButton.textContent = "Fetch";
+                            }
+
+                            populateMountpoints(msg.data || []);
+
+                            const success = msg.success !== false;
+
+                            showConfigStatus(
+                                msg.message ||
+                                    (success
+                                        ? "Mountpoints loaded."
+                                        : "Could not load mountpoints."),
+                                success
+                            );
+
+                            break;
+                        }
                         case 'dop_update':      updateDOP(msg); break;
                         case 'time_update':     updateTime(msg); break;
                         default:                console.warn("Received unknown WS message type:", msg.type); break;
@@ -1981,37 +2004,28 @@
             
 
 
-            document.getElementById('wifi-form')?.addEventListener('submit', (e) => {
-                e.preventDefault();
+            document.getElementById('wifi-form')?.addEventListener('submit', (event) => {
+                event.preventDefault();
 
-                console.log("[WIFI FORM] Submit clicked");
-                console.log("[WIFI FORM] WebSocket state:", websocket?.readyState);
+                if (!websocket || websocket.readyState !== WebSocket.OPEN) {
+                    showConfigStatus("WebSocket not connected.", false);
+                    return;
+                }
 
                 const payload = {
-    type: "wifi_config",
-    ssid: document.getElementById("wifi-ssid").value,
-    pass: document.getElementById("wifi-password").value,
-    enabled: document.getElementById("wifi-enabled").checked
-};
+                    type: "wifi_config",
+                    enabled: document.getElementById('wifi-enabled').checked,
+                    ssid: document.getElementById('wifi-ssid').value.trim(),
+                    pass: document.getElementById('wifi-password').value
+                };
 
-console.log("[WIFI FORM] Payload:", payload);
-websocket.send(JSON.stringify(payload));
-console.log("[WIFI FORM] Payload sent");
+                if (payload.enabled && !payload.ssid) {
+                    showConfigStatus("Enter a Wi-Fi SSID.", false);
+                    return;
+                }
 
-                if (websocket?.readyState === WebSocket.OPEN) {
-                    const enabled = document.getElementById('wifi-enabled').checked;
-                    
-                    // FEEDBACK VISUEL IMMÉDIAT
-                    updateWiFiStatus(enabled);
-
-                    websocket.send(JSON.stringify({ 
-                        type: "wifi_config", 
-                        enabled: enabled, 
-                        ssid: document.getElementById('wifi-ssid').value, 
-                        pass: document.getElementById('wifi-password').value 
-                    }));
-                    showConfigStatus("Wi-Fi sent. ESP will reboot.", true);
-                } else { showConfigStatus("WS not connected.", false); }
+                websocket.send(JSON.stringify(payload));
+                showConfigStatus("Wi-Fi configuration saved. Rebooting...", true);
             });
             document.getElementById('ntrip-form')?.addEventListener('submit', (e) => {
                 e.preventDefault();
@@ -2027,15 +2041,57 @@ console.log("[WIFI FORM] Payload sent");
                 } else { showConfigStatus("WS not connected.", false); }
             });
 
-            document.getElementById('fetch-mountpoints-btn')?.addEventListener('click', () => {
-                const host = document.getElementById('ntrip-host').value;
-                const port = parseInt(document.getElementById('ntrip-port').value);
-                if (host && port > 0) {
-                    if (websocket?.readyState === WebSocket.OPEN) {
-                        websocket.send(JSON.stringify({ type: "fetch_mountpoints", host: host, port: port }));
-                        document.getElementById('ntrip-mount').innerHTML = '<option value="">Fetching...</option>';
-                    } else { alert("WS not connected."); }
-                } else { alert("Enter valid Host/Port."); }
+           document.getElementById('fetch-mountpoints-btn')
+            ?.addEventListener('click', () => {
+                const host =
+                    document.getElementById('ntrip-host').value.trim();
+
+                const port =
+                    parseInt(document.getElementById('ntrip-port').value, 10);
+
+                const user =
+                    document.getElementById('ntrip-user').value.trim();
+
+                const pass =
+                    document.getElementById('ntrip-pass').value;
+
+                const fetchButton =
+                    document.getElementById('fetch-mountpoints-btn');
+
+                const mountSelect =
+                    document.getElementById('ntrip-mount');
+
+                if (!host || !Number.isInteger(port) ||
+                    port <= 0 || port > 65535) {
+                    showConfigStatus(
+                        "Enter a valid NTRIP host and port.",
+                        false
+                    );
+                    return;
+                }
+
+                if (!websocket ||
+                    websocket.readyState !== WebSocket.OPEN) {
+                    showConfigStatus(
+                        "WebSocket is not connected.",
+                        false
+                    );
+                    return;
+                }
+
+                fetchButton.disabled = true;
+                fetchButton.textContent = "Fetching...";
+
+                mountSelect.innerHTML =
+                    '<option value="">Fetching...</option>';
+
+                websocket.send(JSON.stringify({
+                    type: "fetch_mountpoints",
+                    host: host,
+                    port: port,
+                    user: user,
+                    pass: pass
+                }));
             });
 
             document.getElementById('clear-console-btn')?.addEventListener('click', () => {

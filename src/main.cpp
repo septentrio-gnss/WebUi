@@ -20,6 +20,7 @@
 #include "gnss/GnssManager.h"
 #include "ntrip/NtripManager.h"
 #include "ble/BleManager.h"
+#include "BoardFeatures.h"
 
 //#define BOOT_LOG(msg) Serial.printf("[BOOT +%lu ms] %s\n", millis(), msg)
 #include "utils/BootProfiler.h"
@@ -131,7 +132,7 @@ void setup() {
     Serial.begin(115200);
     delay(300);
 
-    Serial.println("\n\n===== Dualy ESP32 Booting Up =====");
+    Serial.println("\n\n===== WebUI ESP32 Booting Up =====");
     BOOT_LOG("Boot started");
     BOOT_LOG("Serial monitor ready");
 
@@ -168,15 +169,15 @@ void setup() {
     BOOT_LOG("WEBUI CRITICAL PATH READY");
 
     BOOT_LOG("Creating delayed STA task");
-    // xTaskCreatePinnedToCore(
-    //     delayedStaTask,
-    //     "DelayedStaTask",
-    //     6000,
-    //     NULL,
-    //     1,
-    //     NULL,
-    //     1
-    // );
+    xTaskCreatePinnedToCore(
+       delayedStaTask,
+       "DelayedStaTask",
+       6000,
+       NULL,
+       1,
+       NULL,
+       1
+    );
     BOOT_LOG("Delayed STA task created");
 
     // ============================================================
@@ -206,10 +207,20 @@ void setup() {
 
     BOOT_LOG("POST-WEBUI SERVICES START");
 
-    BOOT_LOG("Starting LED drivers");
-    initLedDrivers();
-    setBootLedPattern();
-    BOOT_LOG("LED drivers initialized");
+    #if WEBUI_HAS_KTD2026
+
+        BOOT_LOG("Starting KTD2026 LED drivers");
+
+        initLedDrivers();
+        setBootLedPattern();
+
+        BOOT_LOG("KTD2026 LED drivers initialized");
+
+    #else
+
+        BOOT_LOG("KTD2026 LED drivers not available on this ESP32 target");
+
+    #endif
 
     BOOT_LOG("Creating BLE init background task");
 
@@ -234,10 +245,11 @@ void setup() {
 void loop() {
     handleWebSocketLoop();
 
+#if WEBUI_HAS_KTD2026
     updateApplicationLedStatus();
     updateLedOutputs();
+#endif
 
     handlePeriodicStatusUpdates();
-
     printHeartbeat();
 }

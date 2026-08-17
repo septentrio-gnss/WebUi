@@ -17,13 +17,24 @@ void parseAndBroadcastPVT() {
     currentFixCode = finalFixCode;
     lastGnssDataMs = millis();
 
-    uint8_t satsInSolution = (uint8_t)gnss.u2Conv(&gnss.SBFBuffer, 70);
-    bool pvtValid = (finalFixCode != 0);
+    // PVTGeodetic NrSV is one unsigned byte at offset 74.
+    uint8_t rawSatsInSolution = gnss.SBFBuffer.data[74];
+
+    // 255 is the SBF "do not use" value.
+    uint8_t satsInSolution =
+        (rawSatsInSolution == 255) ? 0 : rawSatsInSolution;
+
+    uint8_t pvtError = gnss.SBFBuffer.data[15];
+
+    bool pvtValid =
+        (finalFixCode != 0) &&
+        (pvtError == 0);
 
     JsonDocument posDoc;
     posDoc["type"] = "gga_update";
     posDoc["fix"] = finalFixCode;
     posDoc["valid"] = pvtValid;
+    posDoc["error_code"] = pvtError;
     posDoc["sats_in_use"] = satsInSolution;
 
     if (pvtValid) {
@@ -71,10 +82,13 @@ void parseAndBroadcastPVT() {
 
     static unsigned long lastPvtLog = 0;
     if (millis() - lastPvtLog > 1000) {
-        Serial.printf("[SBF] PVTGeodetic parsed | fix=%u | valid=%s | sats=%u\n",
-                      finalFixCode,
-                      pvtValid ? "YES" : "NO",
-                      satsInSolution);
+        Serial.printf(
+            "[SBF] PVTGeodetic parsed | fix=%u | error=%u | valid=%s | sats=%u\n",
+            finalFixCode,
+            pvtError,
+            pvtValid ? "YES" : "NO",
+            satsInSolution
+        );
         lastPvtLog = millis();
     }
 }
