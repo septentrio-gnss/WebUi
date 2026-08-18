@@ -8,6 +8,9 @@
 #include "logging/LoggingManager.h"
 #include "utils/BootProfiler.h"
 
+extern void delayedStaTask(void *parameter);
+static TaskHandle_t staTaskHandle = nullptr;
+
 void initWebSocketMutex() {
     webSocketMutex = xSemaphoreCreateMutex();
 
@@ -46,7 +49,7 @@ void broadcastJson(String &output) {
 }
 
 void broadcastNtripStatus() {
-    StaticJsonDocument<256> doc;
+    JsonDocument doc;
     doc["type"] = "status";
     doc["connected"] = ntrip.isConnected();
 
@@ -56,7 +59,7 @@ void broadcastNtripStatus() {
 }
 
 void broadcastRtcm(const String& rtcmStatus) {
-    StaticJsonDocument<256> doc;
+    JsonDocument doc;
     doc["type"] = "rtcm";
     doc["data"] = rtcmStatus;
 
@@ -68,7 +71,7 @@ void broadcastRtcm(const String& rtcmStatus) {
 void broadcastReplyToConsole(const String& reply) {
     if (reply.length() == 0) return;
 
-    StaticJsonDocument<512> doc;
+    JsonDocument doc;
     doc["type"] = "raw_receiver_data";
     doc["data"] = reply;
 
@@ -78,7 +81,7 @@ void broadcastReplyToConsole(const String& reply) {
 }
 
 void sendWifiStatus() {
-    StaticJsonDocument<256> doc;
+    JsonDocument doc;
     doc["type"] = "wifi_status";
     doc["connected"] = (WiFi.status() == WL_CONNECTED);
 
@@ -88,7 +91,7 @@ void sendWifiStatus() {
 }
 
 void sendLoggingStatus(uint8_t num) {
-    StaticJsonDocument<256> doc;
+    JsonDocument doc;
     doc["type"] = "logging_status";
     doc["enabled"] = isLogging;
 
@@ -112,7 +115,7 @@ void sendLoggingStatus(uint8_t num) {
 }
 
 void sendJammingStatus() {
-    StaticJsonDocument<256> doc;
+    JsonDocument doc;
     doc["type"] = "jamming_status";
     doc["filters_on"] = currentJammingFiltersOn;
 
@@ -122,7 +125,7 @@ void sendJammingStatus() {
 }
 
 void sendCurrentPositionModes() {
-    StaticJsonDocument<256> doc;
+    JsonDocument doc;
     doc["type"] = "current_pos_modes";
 
     JsonArray modes = doc["modes"].to<JsonArray>();
@@ -135,7 +138,7 @@ void sendCurrentPositionModes() {
 }
 
 void sendStatusUpdate() {
-    StaticJsonDocument<512> doc;
+    JsonDocument doc;
     doc["type"] = "full_status";
     doc["wifi_connected"] = (WiFi.status() == WL_CONNECTED);
     doc["ntrip_connected"] = ntrip.isConnected();
@@ -153,7 +156,7 @@ void sendStatusUpdate() {
 }
 
 static void sendCurrentConfig(uint8_t num) {
-    StaticJsonDocument<512> cfgDoc;
+    JsonDocument cfgDoc;
 
     cfgDoc["type"] = "current_config";
     cfgDoc["wifi_ssid"] = WIFI_SSID;
@@ -186,7 +189,9 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
             IPAddress ip = webSocket.remoteIP(num);
             Serial.printf("[%u] WS Connection from %s\n", num, ip.toString().c_str());
 
-            startRequiredReceiverStreams();
+            // startRequiredReceiverStreams(); 
+            // Removed from WebSocket connection to avoid reconfiguring receiver streams
+            // while GNSS startup is handled by the Core0 background task.
 
             broadcastNtripStatus();
             sendWifiStatus();
@@ -198,7 +203,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         }
 
         case WStype_TEXT: {
-            StaticJsonDocument<1024> doc;
+            JsonDocument doc;
             DeserializationError error = deserializeJson(doc, payload, length);
 
             if (error) {
@@ -240,9 +245,48 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
             Serial.printf("[%u] Rx JSON: %s\n", num, msgType);
 
             if (strcmp(msgType, "fetch_mountpoints") == 0) {
-                if (!doc["host"].isNull() && !doc["port"].isNull()) {
-                    fetchAndSendMountpoints(doc["host"], doc["port"]);
+                String host = doc["host"] | "";
+                int port = doc["port"] | 0;
+                String user = doc["user"] | "";
+                String password = doc["pass"] | "";
+
+                host.trim();
+                user.trim();
+
+                if (host.isEmpty() || port <= 0 || port > 65535) {
+                    JsonDocument response;
+                    response["type"] = "mountpoints_list";
+                    response["success"] = false;
+                    response["message"] = "Invalid NTRIP host or port.";
+                    response["data"].to<JsonArray>();
+
+                    String output;
+                    serializeJson(response, output);
+                    webSocket.sendTXT(num, output);
+                    return;
                 }
+
+                if (WiFi.status() != WL_CONNECTED) {
+                    JsonDocument response;
+                    response["type"] = "mountpoints_list";
+                    response["success"] = false;
+                    response["message"] =
+                        "The ESP32 is not connected to an Internet Wi-Fi network.";
+                    response["data"].to<JsonArray>();
+
+                    String output;
+                    serializeJson(response, output);
+                    webSocket.sendTXT(num, output);
+                    return;
+                }
+
+                fetchAndSendMountpoints(
+                    num,
+                    host,
+                    port,
+                    user,
+                    password
+                );
             }
 
             else if (strcmp(msgType, "wifi_config") == 0) {
@@ -252,9 +296,35 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
 
                 saveCredentials();
 
-                Serial.println("WiFi saved. Rebooting...");
-                delay(1000);
-                ESP.restart();
+                Serial.println("[WIFI] Configuration saved.");
+
+                JsonDocument ack;
+                ack["type"] = "config_ack";
+                ack["message"] = "WiFi configuration saved. Connecting...";
+
+                String out;
+                serializeJson(ack, out);
+                webSocket.sendTXT(num, out);
+
+                if (WIFI_STA_ENABLED && WIFI_SSID.length() > 0) {
+                    BaseType_t taskResult = xTaskCreatePinnedToCore(
+                        delayedStaTask,
+                        "STA_Task",
+                        4096,
+                        NULL,
+                        1,
+                        &staTaskHandle,
+                        1
+                    );
+
+                    if (taskResult == pdPASS) {
+                        Serial.println("[WIFI] STA connection task started.");
+                    } else {
+                        Serial.println("[WIFI ERROR] Failed to create STA task.");
+                    }
+                } else {
+                    Serial.println("[WIFI] STA not started: disabled or SSID missing.");
+                }
             }
 
             else if (strcmp(msgType, "ntrip_config") == 0) {
@@ -268,7 +338,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
 
                 Serial.println("NTRIP saved.");
 
-                StaticJsonDocument<256> ackDoc;
+                JsonDocument ackDoc;
                 ackDoc["type"] = "config_ack";
                 ackDoc["message"] = "NTRIP configuration saved!";
 
@@ -337,7 +407,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
 
                 updateBluetoothState(wantEnabled);
 
-                StaticJsonDocument<256> ack;
+                JsonDocument ack;
                 ack["type"] = "config_ack";
                 ack["message"] = wantEnabled ? "Bluetooth ON (Visible)" : "Bluetooth OFF (Hidden)";
 

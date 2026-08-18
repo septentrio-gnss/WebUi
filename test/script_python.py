@@ -4,7 +4,7 @@ import sys
 
 # --- CONFIGURATION ---
 # 1. Remplacez par l'adresse IP de votre ESP32 (vue dans le Moniteur Série)
-ESP32_IP = "dualy.local"  
+ESP32_IP = "webui.local"  
 
 # 2. Port TCP configuré dans le code de l'ESP32
 ESP32_PORT = 8888

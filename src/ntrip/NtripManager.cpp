@@ -2,116 +2,346 @@
 #include "AppGlobals.h"
 #include "websocket/WebSocketManager.h"
 #include "utils/BootProfiler.h"
+#include <WiFi.h>
+#include <mbedtls/base64.h>
+#include <vector>
 
-void fetchAndSendMountpoints(const String& host, int port) {
-    WiFiClient client;
+static String makeBasicAuthorization(
+    const String& user,
+    const String& password
+) {
+    if (user.isEmpty()) {
+        return "";
+    }
 
-    Serial.printf("Fetching sourcetable from %s:%d\n", host.c_str(), port);
+    const String credentials = user + ":" + password;
 
-    auto sendEmptyList = []() {
-        StaticJsonDocument<256> doc;
-        doc["type"] = "mountpoints_list";
-        doc["data"].to<JsonArray>();
+    const size_t outputCapacity =
+        4 * ((credentials.length() + 2) / 3) + 1;
 
-        String output;
-        serializeJson(doc, output);
-        broadcastJson(output);
-    };
+    std::vector<unsigned char> encoded(outputCapacity);
 
-    if (!client.connect(host.c_str(), port)) {
-        Serial.println("-> Connection failed.");
-        sendEmptyList();
+    size_t encodedLength = 0;
+
+    const int result = mbedtls_base64_encode(
+        encoded.data(),
+        encoded.size(),
+        &encodedLength,
+        reinterpret_cast<const unsigned char*>(
+            credentials.c_str()
+        ),
+        credentials.length()
+    );
+
+    if (result != 0) {
+        return "";
+    }
+
+    encoded[encodedLength] = '\0';
+
+    return String(
+        reinterpret_cast<const char*>(encoded.data())
+    );
+}
+
+
+static void sendMountpointError(
+    uint8_t clientNumber,
+    const String& message
+) {
+    JsonDocument doc;
+
+    doc["type"] = "mountpoints_list";
+    doc["success"] = false;
+    doc["message"] = message;
+    doc["data"].to<JsonArray>();
+
+    String output;
+    serializeJson(doc, output);
+
+    // Called from the WebSocket event callback:
+    // do not call broadcastJson() here.
+    webSocket.sendTXT(clientNumber, output);
+}
+
+
+void fetchAndSendMountpoints(
+    uint8_t clientNumber,
+    const String& host,
+    int port,
+    const String& user,
+    const String& password
+) {
+    if (WiFi.status() != WL_CONNECTED) {
+        sendMountpointError(
+            clientNumber,
+            "No Internet Wi-Fi connection."
+        );
         return;
     }
 
-    client.print("GET / HTTP/1.0\r\nUser-Agent: Dualy-ESP32-Fetcher/1.0\r\nHost: " + host + "\r\nConnection: close\r\n\r\n");
+    WiFiClient client;
+    client.setTimeout(2000);
 
-    unsigned long timeout = millis();
+    Serial.printf(
+        "[NTRIP] Fetching sourcetable from %s:%d\n",
+        host.c_str(),
+        port
+    );
+
+    if (!client.connect(host.c_str(), port)) {
+        Serial.println(
+            "[NTRIP] Sourcetable TCP connection failed."
+        );
+
+        sendMountpointError(
+            clientNumber,
+            "Could not connect to the NTRIP caster."
+        );
+
+        return;
+    }
+
+    const String authorization =
+        makeBasicAuthorization(user, password);
+
+    String request;
+
+    request += "GET / HTTP/1.0\r\n";
+    request += "Host: " + host + "\r\n";
+    request += "User-Agent: NTRIP WebUI-ESP32/1.0\r\n";
+    request += "Ntrip-Version: Ntrip/2.0\r\n";
+
+    if (!authorization.isEmpty()) {
+        request +=
+            "Authorization: Basic " +
+            authorization +
+            "\r\n";
+    }
+
+    request += "Connection: close\r\n";
+    request += "\r\n";
+
+    client.print(request);
+
+    const unsigned long responseStart = millis();
 
     while (client.available() == 0) {
-        if (millis() - timeout > 7000) {
-            Serial.println("-> Sourcetable timeout.");
+        if (millis() - responseStart > 7000) {
             client.stop();
-            sendEmptyList();
+
+            Serial.println(
+                "[NTRIP] Sourcetable response timeout."
+            );
+
+            sendMountpointError(
+                clientNumber,
+                "NTRIP caster response timed out."
+            );
+
             return;
         }
 
         delay(10);
     }
 
-    StaticJsonDocument<1024> doc;
+    String statusLine = client.readStringUntil('\n');
+    statusLine.trim();
+
+    Serial.printf(
+        "[NTRIP] Sourcetable response: %s\n",
+        statusLine.c_str()
+    );
+
+    const bool responseAccepted =
+        statusLine.startsWith("SOURCETABLE 200") ||
+        statusLine.startsWith("HTTP/1.0 200") ||
+        statusLine.startsWith("HTTP/1.1 200");
+
+    if (!responseAccepted) {
+        client.stop();
+
+        if (statusLine.indexOf("401") >= 0) {
+            sendMountpointError(
+                clientNumber,
+                "Authentication failed. Check the FLEPOS user and password."
+            );
+        } else if (statusLine.indexOf("403") >= 0) {
+            sendMountpointError(
+                clientNumber,
+                "Access to the FLEPOS sourcetable was refused."
+            );
+        } else {
+            sendMountpointError(
+                clientNumber,
+                "Caster rejected the sourcetable request: " +
+                statusLine
+            );
+        }
+
+        return;
+    }
+
+    JsonDocument doc;
+
     doc["type"] = "mountpoints_list";
+    doc["success"] = true;
 
-    JsonArray mountpoints = doc["data"].to<JsonArray>();
-    bool headersEnded = false;
+    JsonArray mountpoints =
+        doc["data"].to<JsonArray>();
 
-    while (client.connected() || client.available()) {
-        String line = client.readStringUntil('\n');
-        line.trim();
+    unsigned long lastNetworkActivity = millis();
 
-        if (!headersEnded) {
-            if (line.length() == 0) headersEnded = true;
+    while (
+        client.connected() ||
+        client.available() > 0
+    ) {
+        if (client.available() == 0) {
+            if (
+                millis() - lastNetworkActivity > 5000
+            ) {
+                break;
+            }
+
+            delay(10);
             continue;
         }
 
-        if (line.startsWith("STR;")) {
-            int firstSemi = line.indexOf(';');
-            int secondSemi = line.indexOf(';', firstSemi + 1);
+        String line = client.readStringUntil('\n');
+        line.trim();
 
-            if (secondSemi > firstSemi) {
-                if (mountpoints.add(line.substring(firstSemi + 1, secondSemi)) == false) {
-                    Serial.println("WARN: Mountpoint JSON document full. Stopping parse.");
-                    break;
-                }
+        lastNetworkActivity = millis();
+
+        /*
+         * Do not depend on a blank line separating headers
+         * from the sourcetable. Parse every STR record found.
+         */
+        if (line.startsWith("STR;")) {
+            const int firstSeparator =
+                line.indexOf(';');
+
+            const int secondSeparator =
+                line.indexOf(
+                    ';',
+                    firstSeparator + 1
+                );
+
+            if (
+                firstSeparator >= 0 &&
+                secondSeparator > firstSeparator + 1
+            ) {
+                const String mountpoint =
+                    line.substring(
+                        firstSeparator + 1,
+                        secondSeparator
+                    );
+
+                mountpoints.add(mountpoint);
             }
-        } else if (line == "ENDSOURCETABLE") {
+        }
+
+        if (line == "ENDSOURCETABLE") {
             break;
         }
     }
 
-    Serial.printf("-> Found %d mountpoints.\n", mountpoints.size());
+    client.stop();
+
+    const size_t count = mountpoints.size();
+
+    Serial.printf(
+        "[NTRIP] Found %u mountpoints.\n",
+        static_cast<unsigned int>(count)
+    );
+
+    if (count == 0) {
+        doc["success"] = false;
+        doc["message"] =
+            "The caster returned no accessible mountpoints.";
+    } else {
+        doc["message"] =
+            String(count) +
+            " mountpoints loaded.";
+    }
 
     String output;
     serializeJson(doc, output);
-    broadcastJson(output);
 
-    client.stop();
+    /*
+     * Important: do not call broadcastJson() here.
+     * The WebSocket mutex is already held by webSocket.loop().
+     */
+    webSocket.sendTXT(clientNumber, output);
 }
 
 void handleInternalNtrip() {
+    static unsigned long lastConnectAttempt = 0;
+    static bool wasConnected = false;
+
+    if (!gnssSerialReady || !receiverStreamsReady) {
+        return;
+    }
+
     if (ntripUserRequestConnect && !ntrip.isConnected()) {
+        if (WiFi.status() != WL_CONNECTED) {
+            static unsigned long lastNoWifiLog = 0;
+
+            if (millis() - lastNoWifiLog > 5000) {
+                Serial.println("[NTRIP] Waiting for WiFi STA connection before NTRIP connect...");
+                lastNoWifiLog = millis();
+            }
+
+            return;
+        }
+
+        if (millis() - lastConnectAttempt < 10000) {
+            return;
+        }
+
+        lastConnectAttempt = millis();
+
         static bool firstNtripAttemptLogged = false;
 
         if (!firstNtripAttemptLogged) {
             BOOT_LOG("First NTRIP connection attempt");
             firstNtripAttemptLogged = true;
         }
-        Serial.println("Loop: Req NTRIP connect...");
+
+        Serial.printf("[NTRIP] Connecting to %s:%d / %s...\n",
+                      NTRIP_HOST.c_str(),
+                      NTRIP_PORT,
+                      NTRIP_MOUNT.c_str());
 
         if (!ntrip.connect(NTRIP_HOST, NTRIP_PORT, NTRIP_MOUNT, NTRIP_USER, NTRIP_PASS)) {
-            ntripUserRequestConnect = false;
-            Serial.println("Loop: NTRIP connect failed.");
+            Serial.println("[NTRIP] Connect failed. Keeping auto-connect request active; retry in 10 s.");
+            broadcastNtripStatus();
+            return;
         }
 
+        Serial.println("[NTRIP] Connected.");
+        wasConnected = true;
         broadcastNtripStatus();
     }
 
-    size_t rtcmBytes = ntrip.loop();
+    if (ntrip.isConnected()) {
+        size_t rtcmBytes = ntrip.loop();
 
-    if (rtcmBytes > 0) {
-        static bool firstRtcmLogged = false;
+        if (rtcmBytes > 0) {
+            static bool firstRtcmLogged = false;
 
-        if (!firstRtcmLogged) {
-            BOOT_LOG("First RTCM bytes received from NTRIP");
-            firstRtcmLogged = true;
+            if (!firstRtcmLogged) {
+                BOOT_LOG("First RTCM bytes received from NTRIP");
+                firstRtcmLogged = true;
+            }
+
+            broadcastRtcm("[RTCM via WiFi] " + String(rtcmBytes) + " bytes Rx.");
+            lastRtcmActivity = millis();
         }
-        broadcastRtcm("[RTCM via WiFi] " + String(rtcmBytes) + " bytes Rx.");
-        lastRtcmActivity = millis();
     }
 
-    if (ntripUserRequestConnect && !ntrip.isConnected()) {
-        Serial.println("Loop: NTRIP socket closed.");
-        ntripUserRequestConnect = false;
+    if (wasConnected && ntripUserRequestConnect && !ntrip.isConnected()) {
+        Serial.println("[NTRIP] Socket closed. Auto-connect request remains active; retry will continue.");
+        wasConnected = false;
         broadcastNtripStatus();
     }
 }

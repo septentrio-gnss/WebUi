@@ -3,4 +3,10 @@
 #include <Arduino.h>
 
 void handleInternalNtrip();
-void fetchAndSendMountpoints(const String& host, int port);
+void fetchAndSendMountpoints(
+    uint8_t clientNumber,
+    const String& host,
+    int port,
+    const String& user,
+    const String& password
+);

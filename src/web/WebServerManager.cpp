@@ -1,6 +1,63 @@
 #include "web/WebServerManager.h"
 #include "AppGlobals.h"
 #include "utils/BootProfiler.h"
+#include "WebUIConfig.h"
+
+
+static TaskHandle_t staTaskHandle = nullptr;
+
+static const char* wifiStatusToText(wl_status_t status) {
+    switch (status) {
+        case WL_IDLE_STATUS: return "WL_IDLE_STATUS";
+        case WL_NO_SSID_AVAIL: return "WL_NO_SSID_AVAIL";
+        case WL_SCAN_COMPLETED: return "WL_SCAN_COMPLETED";
+        case WL_CONNECTED: return "WL_CONNECTED";
+        case WL_CONNECT_FAILED: return "WL_CONNECT_FAILED";
+        case WL_CONNECTION_LOST: return "WL_CONNECTION_LOST";
+        case WL_DISCONNECTED: return "WL_DISCONNECTED";
+        default: return "UNKNOWN";
+    }
+}
+
+static void printStaDiagnostics() {
+    wl_status_t status = WiFi.status();
+
+    Serial.printf("[STA] Status: %d (%s) | RSSI: %d dBm | STA IP: %s\n",
+                  status,
+                  wifiStatusToText(status),
+                  WiFi.RSSI(),
+                  WiFi.localIP().toString().c_str());
+}
+
+static void scanForConfiguredSsid() {
+    Serial.printf("[STA] Scanning for configured SSID '%s'...\n", WIFI_SSID.c_str());
+
+    int networkCount = WiFi.scanNetworks(false, true);
+
+    if (networkCount <= 0) {
+        Serial.printf("[STA] Scan result: no networks found or scan failed (%d).\n", networkCount);
+        WiFi.scanDelete();
+        return;
+    }
+
+    bool found = false;
+
+    for (int i = 0; i < networkCount; i++) {
+        if (WiFi.SSID(i) == WIFI_SSID) {
+            found = true;
+            Serial.printf("[STA] Target SSID found | channel=%d | RSSI=%d dBm | encryption=%d\n",
+                          WiFi.channel(i),
+                          WiFi.RSSI(i),
+                          WiFi.encryptionType(i));
+        }
+    }
+
+    if (!found) {
+        Serial.println("[STA] Target SSID NOT found. Check hotspot is ON, 2.4 GHz compatible, and SSID spelling.");
+    }
+
+    WiFi.scanDelete();
+}
 
 void initFileSystem() {
     if (!SPIFFS.begin(true)) {
@@ -12,43 +69,45 @@ void initFileSystem() {
 }
 
 void initWiFiAndMdns() {
-    WiFi.setHostname("dualy-esp32");
+    WiFi.setHostname(WEBUI_HOSTNAME);
 
     IPAddress local_AP_IP(192, 168, 3, 1);
     IPAddress gateway(192, 168, 3, 1);
     IPAddress subnet(255, 255, 255, 0);
 
-    Serial.println("\nStarting AP 'DUALY_CONFIG'...");
+    Serial.printf("\nStarting AP '%s'...\n", WEBUI_AP_SSID);
 
-    if (WIFI_STA_ENABLED && WIFI_SSID.length() > 0) {
-        Serial.println("Mode: AP + STA (Station enabled)");
-        WiFi.mode(WIFI_AP_STA);
-    } else {
-        Serial.println("Mode: AP Only (Station disabled)");
-        WiFi.mode(WIFI_AP);
-    }
+    Serial.println("Mode: AP first, STA delayed in background");
+    WiFi.mode(WIFI_AP);
 
     if (!WiFi.softAPConfig(local_AP_IP, gateway, subnet)) {
-        Serial.println("Error: AP configuration failed!");
+        Serial.println("[WIFI ERROR] AP configuration failed.");
     }
 
-    WiFi.softAP("DUALY_CONFIG");
+    const bool apStarted =
+        WiFi.softAP(WEBUI_AP_SSID, nullptr, 6, false, 4);
 
-    Serial.print("AP IP: ");
-    Serial.println(WiFi.softAPIP());
+    Serial.printf("[WIFI] AP started: %s\n",
+                  apStarted ? "YES" : "NO");
 
-    if (WIFI_STA_ENABLED && WIFI_SSID.length() > 0) {
-        WiFi.begin(WIFI_SSID.c_str(), WIFI_PASSWORD.c_str());
-        Serial.println("Station WiFi connection started in background.");
-    } else {
-        Serial.println("Station WiFi not started.");
-    }
+    Serial.printf("[WIFI] AP SSID: %s\n",
+                  WiFi.softAPSSID().c_str());
 
-    if (MDNS.begin("dualy")) {
-        Serial.println("mDNS started: http://dualy.local");
+    Serial.printf("[WIFI] AP IP: %s\n",
+                  WiFi.softAPIP().toString().c_str());
+
+    Serial.printf("[WIFI] AP channel: %d\n",
+                  WiFi.channel());
+
+    if (MDNS.begin(WEBUI_MDNS_NAME)) {
+        Serial.printf("[WIFI] mDNS started: http://%s.local\n",
+                      WEBUI_MDNS_NAME);
+
         MDNS.addService("http", "tcp", 80);
     } else {
-        Serial.println("mDNS Error. Direct IP still available: http://192.168.3.1");
+        Serial.println(
+            "[WIFI ERROR] mDNS failed. Use http://192.168.3.1"
+        );
     }
 }
 
@@ -61,27 +120,49 @@ void initHttpServer() {
             firstHttpRequestLogged = true;
         }
 
-        if (!SPIFFS.exists("/index.html")) {
-            Serial.println("[HTTP ERROR] /index.html not found in SPIFFS");
-            request->send(404, "text/plain", "index.html not found.");
+        if (SPIFFS.exists("/index.html.gz")) {
+            static bool firstIndexServedLogged = false;
+
+            if (!firstIndexServedLogged) {
+                BOOT_LOG("Serving first compressed WebUI index.html.gz");
+                firstIndexServedLogged = true;
+            }
+
+            AsyncWebServerResponse *response =
+                request->beginResponse(SPIFFS, "/index.html.gz", "text/html");
+
+            response->addHeader("Content-Encoding", "gzip");
+            response->addHeader("Cache-Control", "no-cache");
+            request->send(response);
             return;
         }
 
-        static bool firstIndexServedLogged = false;
+        if (SPIFFS.exists("/index.html")) {
+            static bool firstIndexServedLogged = false;
 
-        if (!firstIndexServedLogged) {
-            BOOT_LOG("Serving first WebUI index.html");
-            firstIndexServedLogged = true;
+            if (!firstIndexServedLogged) {
+                BOOT_LOG("Serving first WebUI index.html");
+                firstIndexServedLogged = true;
+            }
+
+            AsyncWebServerResponse *response =
+                request->beginResponse(SPIFFS, "/index.html", "text/html");
+
+            response->addHeader("Cache-Control", "no-cache");
+            request->send(response);
+            return;
         }
 
-        AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/index.html", "text/html");
-        response->addHeader("Cache-Control", "no-cache");
-        request->send(response);
+        Serial.println("[HTTP ERROR] /index.html.gz and /index.html not found in SPIFFS");
+        request->send(404, "text/plain", "index.html not found.");
     });
 
     server.onNotFound([](AsyncWebServerRequest *request) {
         String path = request->url();
-        if (path.endsWith("/")) path += "index.html";
+
+        if (path.endsWith("/")) {
+            path += "index.html";
+        }
 
         String pathGz = path + ".gz";
         String contentType = "text/plain";
@@ -93,25 +174,111 @@ void initHttpServer() {
         else if (path.endsWith(".svg")) contentType = "image/svg+xml";
 
         if (SPIFFS.exists(pathGz)) {
-            AsyncWebServerResponse *response = request->beginResponse(SPIFFS, pathGz, contentType);
+            AsyncWebServerResponse *response =
+                request->beginResponse(SPIFFS, pathGz, contentType);
+
             response->addHeader("Content-Encoding", "gzip");
             response->addHeader("Cache-Control", "public, max-age=3600");
             request->send(response);
-        } else if (SPIFFS.exists(path)) {
-            AsyncWebServerResponse *response = request->beginResponse(SPIFFS, path, contentType);
+            return;
+        }
 
-            if (path.endsWith(".css") || path.endsWith(".js") || path.endsWith(".svg") || path.endsWith(".png")) {
+        if (SPIFFS.exists(path)) {
+            AsyncWebServerResponse *response =
+                request->beginResponse(SPIFFS, path, contentType);
+
+            if (path.endsWith(".css") || path.endsWith(".js") ||
+                path.endsWith(".svg") || path.endsWith(".png")) {
                 response->addHeader("Cache-Control", "public, max-age=3600");
             } else {
                 response->addHeader("Cache-Control", "no-cache");
             }
 
             request->send(response);
-        } else {
-            Serial.printf("Not Found: %s\n", path.c_str());
-            request->send(404, "text/plain", "Not Found");
+            return;
         }
+
+        Serial.printf("Not Found: %s\n", path.c_str());
+        request->send(404, "text/plain", "Not Found");
     });
 
     server.begin();
+}
+
+void delayedStaTask(void *parameter) {
+    BOOT_LOG("STA task started after WebUI request");
+
+    if (!WIFI_STA_ENABLED || WIFI_SSID.length() == 0) {
+        Serial.println("[STA] Not started: WiFi client disabled or SSID missing.");
+        vTaskDelete(NULL);
+        return;
+    }
+
+    BOOT_LOG("Starting STA WiFi connection");
+
+    WiFi.persistent(false);
+    WiFi.setSleep(true);
+    WiFi.setAutoReconnect(true);
+
+    Serial.printf("[STA] Before AP_STA | AP SSID: %s | AP IP: %s | AP clients: %d | channel: %d\n",
+                  WiFi.softAPSSID().c_str(),
+                  WiFi.softAPIP().toString().c_str(),
+                  WiFi.softAPgetStationNum(),
+                  WiFi.channel());
+
+    // Switch from pure AP to AP+STA only when requested from WebUI
+    WiFi.mode(WIFI_AP_STA);
+    vTaskDelay(pdMS_TO_TICKS(500));
+
+    Serial.printf("[STA] AP_STA active | AP SSID: %s | AP IP: %s | channel: %d\n",
+                  WiFi.softAPSSID().c_str(),
+                  WiFi.softAPIP().toString().c_str(),
+                  WiFi.channel());
+
+    if (NTRIP_AUTO_CONNECT &&
+        NTRIP_HOST.length() > 0 &&
+        NTRIP_MOUNT.length() > 0) {
+        ntripUserRequestConnect = true;
+        Serial.println("[NTRIP] Auto-connect armed. NTRIP runtime will wait for STA if needed.");
+    } else {
+        Serial.println("[NTRIP] Auto-connect not armed: missing NTRIP config.");
+    }
+
+    Serial.printf("[STA] Connecting to SSID '%s'...\n", WIFI_SSID.c_str());
+    WiFi.begin(WIFI_SSID.c_str(), WIFI_PASSWORD.c_str());
+
+    Serial.printf(
+        "[STA] Password configured: %s\n",
+        WIFI_PASSWORD.isEmpty() ? "NO" : "YES"
+    );
+
+    unsigned long startAttempt = millis();
+    unsigned long lastDiagnostic = 0;
+
+    while (WiFi.status() != WL_CONNECTED && millis() - startAttempt < 20000) {
+        vTaskDelay(pdMS_TO_TICKS(500));
+        Serial.print(".");
+
+        if (millis() - lastDiagnostic > 3000) {
+            Serial.println();
+            printStaDiagnostics();
+            lastDiagnostic = millis();
+        }
+    }
+
+    Serial.println();
+
+    if (WiFi.status() == WL_CONNECTED) {
+        BOOT_LOG("STA WiFi connected");
+        Serial.print("[STA] Connected. STA IP: ");
+        Serial.println(WiFi.localIP());
+        Serial.printf("[STA] Connected channel: %d | RSSI: %d dBm\n", WiFi.channel(), WiFi.RSSI());
+    } else {
+        Serial.printf("[STA] Connection failed. Final status: %d (%s)\n",
+                      WiFi.status(),
+                      wifiStatusToText(WiFi.status()));
+        Serial.println("[STA] AP should remain available.");
+    }
+
+    vTaskDelete(NULL);
 }

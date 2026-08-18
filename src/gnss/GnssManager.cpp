@@ -17,45 +17,86 @@ void initGnss() {
 }
 
 void sendCommandToReceiver(const String& command) {
-    if (millis() - lastRtcmActivity < 5000) {
-        Serial.println("INFO : RTCM recently active. Forcing receiver into command mode.");
+    if (!gnssSerialReady) {
+        Serial.printf(
+            "[GNSS WARNING] Command ignored because GNSS Serial2 is not ready yet: %s\n",
+            command.c_str()
+        );
+        return;
+    }
+
+    const unsigned long RTCM_RECENT_WINDOW_MS = 5000;
+
+    bool rtcmWasRecentlyActive =
+        (lastRtcmActivity != 0) &&
+        ((millis() - lastRtcmActivity) < RTCM_RECENT_WINDOW_MS);
+
+    if (rtcmWasRecentlyActive) {
+        Serial.println("INFO: RTCM recently active. Forcing receiver into command mode.");
+
         Serial2.print("SSSSSSSSSS");
-        delay(50);
+        Serial2.flush();
+
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
 
-    Serial2.println(command);
+    Serial2.print(command);
+    Serial2.print("\r\n");
 
-    if (!ntrip.isConnected()) {
-        Serial.printf("Sent to Receiver: %s\n", command.c_str());
-    }
+    // Wait until the complete command has physically left the UART.
+    Serial2.flush();
+
+    Serial.printf("Sent to Receiver: %s\n", command.c_str());
 }
 
 void startRequiredReceiverStreams() {
     Serial.println("INFO: Starting RxControl-like SBF/NMEA streams on COM2...");
 
+    const TickType_t commandDelay = pdMS_TO_TICKS(250);
+
+    // First disable existing streams.
     sendCommandToReceiver("sso,Stream1,COM2,,off");
-    delay(100);
+    vTaskDelay(commandDelay);
 
     sendCommandToReceiver("sso,Stream2,COM2,,off");
-    delay(100);
+    vTaskDelay(commandDelay);
 
     sendCommandToReceiver("sso,Stream3,COM2,,off");
-    delay(100);
+    vTaskDelay(commandDelay);
 
     sendCommandToReceiver("sno,Stream4,COM2,,off");
-    delay(100);
+    vTaskDelay(commandDelay);
 
-    sendCommandToReceiver("sso,Stream1,COM2,PVTGeodetic+QualityInd+RFStatus+ReceiverStatus+DOP+ReceiverTime,sec1");
-    delay(100);
+    // Give the receiver additional time after disabling all streams.
+    vTaskDelay(pdMS_TO_TICKS(500));
 
-    sendCommandToReceiver("sso,Stream2,COM2,SatVisibility+ChannelStatus+MeasEpoch+EndOfPVT,sec1");
-    delay(100);
+    // Enable required SBF streams.
+    sendCommandToReceiver(
+        "sso,Stream1,COM2,"
+        "PVTGeodetic+QualityInd+RFStatus+ReceiverStatus+DOP+ReceiverTime,"
+        "sec1"
+    );
+    vTaskDelay(commandDelay);
 
-    sendCommandToReceiver("sso,Stream3,COM2,PosCovGeodetic+VelCovGeodetic,sec1");
-    delay(100);
+    sendCommandToReceiver(
+        "sso,Stream2,COM2,"
+        "SatVisibility+ChannelStatus+MeasEpoch+EndOfPVT,"
+        "sec1"
+    );
+    vTaskDelay(commandDelay);
 
+    sendCommandToReceiver(
+        "sso,Stream3,COM2,"
+        "PosCovGeodetic+VelCovGeodetic,"
+        "sec1"
+    );
+    vTaskDelay(commandDelay);
+
+    // Enable GGA.
     sendCommandToReceiver("sno,Stream4,COM2,GGA,sec1");
-    delay(100);
+    vTaskDelay(commandDelay);
+
+    Serial.println("INFO: Receiver stream configuration commands completed.");
 }
 
 void handleSerialParsing() {
@@ -229,7 +270,7 @@ void handleSerialParsing() {
         }
     }
 
-    if (millis() - lastGnssDebug >= 1000) {
+    if (millis() - lastGnssDebug >= 5000) {
         Serial.printf(
             "[GNSS] bytes/s=%lu | SBF sync/s=%lu | SBF parsed/s=%lu | NMEA/s=%lu | GGA/s=%lu | ASCII/s=%lu | console lines/s=%lu\n",
             gnssBytesThisSecond,
