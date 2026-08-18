@@ -281,7 +281,7 @@ The main dashboard provides a complete overview of:
 
 ### Quality Indicators
 
-![Quality Indicators](docs/images/quality-indicators.png)
+![Quality Indicators](docs/images/quality_indicators.png)
 
 The displayed indicators are decoded from the receiver `QualityInd` block and converted to a simplified visual scale.
 
