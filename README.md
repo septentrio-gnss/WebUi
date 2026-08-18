@@ -326,8 +326,6 @@ The initialization panel indicates whether each critical service is available:
 
 ### No-Data State
 
-![No GNSS Data](docs/images/no-gnss-data.png)
-
 When receiver data are unavailable, the interface displays placeholders rather than misleading zero values.
 
 ---
