@@ -60,8 +60,6 @@ A responsive, browser-based interface for monitoring, configuring and controllin
 
 ---
 
----
-
 ## Overview
 
 **WebUI** turns an ESP32-S3 into an embedded interface for a **Septentrio mosaic GNSS receiver**.
