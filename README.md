@@ -345,6 +345,7 @@ The complete documentation index is available in [`docs/README.md`](docs/README.
 ---
 
 ## Repository Structure
+```text
 
 WebUI/
 │
@@ -396,7 +397,7 @@ WebUI/
 | HTTP Server | ESPAsyncWebServer |
 | Wireless | Wi-Fi + BLE |
 | Web Storage | SPIFFS |
-
+```
 ---
 
 ## Design Principles
