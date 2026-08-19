@@ -96,78 +96,19 @@ Then continue with:
 </table>
 
 ---
+## Main Workflows
 
-## Typical Workflows
+<div align="center">
+  <img src="images/webui-main-workflows.svg"
+       alt="WebUI Main Workflows"
+       width="1000">
+</div>
 
-### Deploy WebUI on a supported board
+This diagram summarizes the three main workflow families of the project:
 
-```text
-Clone repository
-      ↓
-Select PlatformIO environment
-      ↓
-Build firmware
-      ↓
-Prepare WebUI assets
-      ↓
-Upload firmware
-      ↓
-Upload SPIFFS filesystem
-      ↓
-Connect to WEBUI_CONFIG
-      ↓
-Open WebUI in browser
-```
-
-See the [Getting Started Guide](getting-started/README.md).
-
----
-
-### Integrate a new ESP32-based platform
-
-```text
-Check hardware compatibility
-      ↓
-Define board-specific parameters
-      ↓
-Configure UART pins
-      ↓
-Configure flash / PSRAM
-      ↓
-Enable optional board capabilities
-      ↓
-Build and flash
-      ↓
-Validate GNSS communication
-```
-
-See the [Hardware & Board Profiles Guide](hardware/README.md).
-
----
-
-### Validate GNSS corrections
-
-```text
-GNSS receiver operational
-      ↓
-Valid GGA available
-      ↓
-ESP32 connected to Internet Wi-Fi
-      ↓
-NTRIP caster configured
-      ↓
-Mountpoint selected
-      ↓
-NTRIP connection established
-      ↓
-RTCM data received
-      ↓
-Corrections forwarded to receiver
-      ↓
-DGNSS / RTK behaviour verified
-```
-
-See the [Connectivity Guide](connectivity/README.md) and [Testing & Validation Guide](testing/README.md).
+- **Deploy WebUI** on a supported board
+- **Integrate** a new ESP32-based platform
+- **Validate GNSS corrections** through the NTRIP-to-receiver chain
 
 ---
 
