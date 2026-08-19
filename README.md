@@ -402,18 +402,64 @@ WebUI/
 
 ## Design Principles
 
-### Embedded
+<div align="center">
 
-The interface runs directly on the ESP32.  
-No external web server is required.
+<table>
+<tr>
 
-### Reusable
+<td width="33%" align="center" valign="top">
 
-Dualy is the reference implementation, not a limitation of the WebUI architecture.
+### ⚡ EMBEDDED
 
-### Observable
+**Runs where the GNSS data lives.**
 
-The interface and serial diagnostics are designed to make the state of GNSS, Wi-Fi, NTRIP, Bluetooth and receiver communication immediately visible.
+The complete WebUI is hosted directly on the **ESP32-S3**.
+
+No external server.  
+No cloud dependency.  
+No dedicated desktop software for routine monitoring.
+
+</td>
+
+<td width="33%" align="center" valign="top">
+
+### 🔄 REUSABLE
+
+**Built for more than one product.**
+
+**Dualy** is the reference implementation, but the WebUI core is designed for reuse across compatible:
+
+**ESP32 + Septentrio mosaic** integrations.
+
+Board-specific features remain separated from the main application logic.
+
+</td>
+
+<td width="33%" align="center" valign="top">
+
+### 👁️ OBSERVABLE
+
+**Know what the system is doing.**
+
+The interface and runtime diagnostics provide clear visibility into:
+
+**GNSS · Wi-Fi · NTRIP · RTCM · BLE · Receiver Communication**
+
+The goal is simple:  
+**no hidden system state.**
+
+</td>
+
+</tr>
+</table>
+
+</div>
+
+<p align="center">
+  <b>Embedded by design · Reusable by architecture · Observable in operation</b>
+</p>
+
+---
 
 ---
 
