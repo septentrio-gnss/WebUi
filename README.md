@@ -218,7 +218,7 @@ These RTCM corrections are then forwarded to the Septentrio mosaic receiver to i
 ### 1. Clone the repository
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/septentrio-gnss/WebUi.git
 cd WebUI
 ```
 
