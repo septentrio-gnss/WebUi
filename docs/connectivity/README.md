@@ -84,7 +84,7 @@ Station startup is intentionally kept outside the critical WebUI startup path so
 
 <img src="../images/ntrip-runtime-flow.svg"
      alt="WebUI NTRIP and RTCM Runtime Flow"
-     width="1000">
+     width="500">
 
 </div>
 
