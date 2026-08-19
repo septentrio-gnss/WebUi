@@ -326,7 +326,6 @@ After a successful boot, the ESP32 creates its local configuration network:
 
 Connect your laptop, smartphone, or tablet to `WEBUI_CONFIG`, then open:
 
-```text
 http://192.168.3.1
 
 ## Documentation
@@ -347,7 +346,6 @@ The complete documentation index is available in [`docs/README.md`](docs/README.
 
 ## Repository Structure
 
-```text
 WebUI/
 │
 ├── src/
@@ -380,7 +378,6 @@ WebUI/
 ├── compress_webui.py
 ├── platformio.ini
 └── README.md
-```
 
 ---
 
