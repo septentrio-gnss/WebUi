@@ -39,6 +39,29 @@ A responsive, browser-based interface for monitoring, configuring and controllin
 
 ---
 
+## Table of Contents
+
+- [Overview](#overview)
+- [Key Features](#key-features)
+- [Live Interface](#live-interface)
+- [Validated Against RxControl](#validated-against-rxcontrol)
+- [System Architecture](#system-architecture)
+- [NTRIP Correction Flow](#ntrip-correction-flow)
+- [Quick Start](#quick-start)
+- [Documentation](#documentation)
+- [Repository Structure](#repository-structure)
+- [Technology Stack](#technology-stack)
+- [Design Principles](#design-principles)
+- [Project Status](#project-status)
+- [Contributing](#contributing)
+- [Support](#support)
+- [License](#license)
+- [Acknowledgments](#acknowledgments)
+
+---
+
+---
+
 ## Overview
 
 **WebUI** turns an ESP32-S3 into an embedded interface for a **Septentrio mosaic GNSS receiver**.
