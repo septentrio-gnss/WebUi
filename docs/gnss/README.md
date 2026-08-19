@@ -146,7 +146,7 @@ WebUI actively requests the receiver data required by the interface.
 
 <img src="../images/receiver-streams.svg"
      alt="WebUI Receiver Stream Configuration"
-     width="1000">
+     width="600">
 
 </div>
 
