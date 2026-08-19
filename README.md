@@ -379,7 +379,7 @@ WebUI/
 ├── compress_webui.py
 ├── platformio.ini
 └── README.md
-
+```
 ---
 
 ## Technology Stack
@@ -397,7 +397,7 @@ WebUI/
 | HTTP Server | ESPAsyncWebServer |
 | Wireless | Wi-Fi + BLE |
 | Web Storage | SPIFFS |
-```
+
 ---
 
 ## Design Principles
