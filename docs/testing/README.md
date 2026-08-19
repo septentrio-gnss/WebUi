@@ -54,7 +54,7 @@ A feature should only be marked **Validated** when the expected result has been 
 
 <img src="../images/validation-sequence.svg"
      alt="WebUI Validation Sequence"
-     width="950">
+     width="500">
 
 </div>
 
@@ -199,7 +199,7 @@ NTRIP validation must be performed in layers.
 
 <img src="../images/ntrip-validation-levels.svg"
      alt="NTRIP Validation Levels"
-     width="950">
+     width="400">
 
 </div>
 
