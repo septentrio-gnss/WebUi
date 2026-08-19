@@ -345,8 +345,8 @@ The complete documentation index is available in [`docs/README.md`](docs/README.
 ---
 
 ## Repository Structure
-```text
 
+```text
 WebUI/
 │
 ├── src/
