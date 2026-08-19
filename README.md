@@ -190,49 +190,28 @@ The ESP32 can also exchange GGA and RTCM corrections with an NTRIP caster and pr
 
 </div>
 
-For a detailed description of the firmware architecture, task separation, data flow and hardware abstraction, see the [Architecture Guide](docs/architecture/README.md).
+> For a detailed description of the firmware architecture, task separation, data flow and hardware abstraction, see the [Architecture Guide](docs/architecture/README.md).
 
 ## NTRIP Correction Flow
 
-WebUI includes an embedded NTRIP client for Internet-based GNSS corrections.
+The NTRIP workflow allows WebUI to retrieve correction data from an external caster and forward it to the GNSS receiver through the ESP32-S3.
 
-```text
-mosaic receiver
-      │
-      │ GGA
-      ▼
-    ESP32
-      │
-      │ NTRIP
-      ▼
- NTRIP Caster
-      │
-      │ RTCM
-      ▼
-    ESP32
-      │
-      │ UART
-      ▼
-mosaic receiver
-      │
-      ▼
- DGNSS / RTK
-```
+<div align="center">
 
-The current implementation supports:
+<img src="docs/images/ntrip-correction-flow.png"
+     alt="NTRIP Correction Flow"
+     width="1000">
 
-- NTRIP caster configuration
-- Username and password authentication
-- Sourcetable retrieval
-- Dynamic mountpoint selection
-- GGA forwarding
-- RTCM reception
-- RTCM forwarding to the receiver
-- Correction-state monitoring
+<br>
 
-More information is available in the [Connectivity Guide](docs/connectivity/README.md).
+<sub>
+The ESP32-S3 connects to a Wi-Fi network, requests the sourcetable from the NTRIP caster, selects a mountpoint, sends GGA messages upstream when needed, and receives RTCM correction data back.  
+These RTCM corrections are then forwarded to the Septentrio mosaic receiver to improve positioning performance.
+</sub>
 
----
+</div>
+
+> For implementation details about NTRIP configuration, mountpoint fetching, connection logic, and RTCM forwarding, see the [Connectivity Guide](docs/connectivity/README.md).
 
 ## Quick Start
 
