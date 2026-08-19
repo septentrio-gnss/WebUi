@@ -215,58 +215,119 @@ These RTCM corrections are then forwarded to the Septentrio mosaic receiver to i
 
 ## Quick Start
 
+Choose your development environment and follow the corresponding commands.
+
+<table>
+<tr>
+<th width="50%">🐧 Linux / macOS</th>
+<th width="50%">🪟 Windows PowerShell</th>
+</tr>
+
+<tr>
+<td valign="top">
+
 ### 1. Clone the repository
 
-```bash
-git clone https://github.com/septentrio-gnss/WebUi.git
-cd WebUI
-```
+<pre><code>git clone https://github.com/septentrio-gnss/WebUi.git
+cd WebUi</code></pre>
+
+</td>
+<td valign="top">
+
+### 1. Clone the repository
+
+<pre><code>git clone https://github.com/septentrio-gnss/WebUi.git
+cd WebUi</code></pre>
+
+</td>
+</tr>
+
+<tr>
+<td valign="top">
 
 ### 2. Build the firmware
 
-```bash
-pio run
-```
+<pre><code>pio run</code></pre>
+
+</td>
+<td valign="top">
+
+### 2. Build the firmware
+
+<pre><code>& "$env:USERPROFILE\.platformio\penv\Scripts\platformio.exe" run</code></pre>
+
+</td>
+</tr>
+
+<tr>
+<td valign="top">
 
 ### 3. Prepare the WebUI assets
 
-```bash
-python compress_webui.py
-```
+<pre><code>python3 compress_webui.py</code></pre>
+
+</td>
+<td valign="top">
+
+### 3. Prepare the WebUI assets
+
+<pre><code>& "$env:USERPROFILE\.platformio\penv\Scripts\python.exe" .\compress_webui.py</code></pre>
+
+</td>
+</tr>
+
+<tr>
+<td valign="top">
 
 ### 4. Upload the firmware
 
-```bash
-pio run -t upload
-```
+<pre><code>pio run -t upload</code></pre>
+
+</td>
+<td valign="top">
+
+### 4. Upload the firmware
+
+<pre><code>& "$env:USERPROFILE\.platformio\penv\Scripts\platformio.exe" run -t upload</code></pre>
+
+</td>
+</tr>
+
+<tr>
+<td valign="top">
 
 ### 5. Upload the WebUI filesystem
 
-```bash
-pio run -t uploadfs
-```
+<pre><code>pio run -t uploadfs</code></pre>
+
+</td>
+<td valign="top">
+
+### 5. Upload the WebUI filesystem
+
+<pre><code>& "$env:USERPROFILE\.platformio\penv\Scripts\platformio.exe" run -t uploadfs</code></pre>
+
+</td>
+</tr>
+</table>
+
+> [!TIP]
+> If `pio` is already available in your Windows `PATH`, the shorter commands `pio run`, `pio run -t upload`, and `pio run -t uploadfs` work as well.
 
 ### 6. Connect to WebUI
 
-After boot:
+After a successful boot, the ESP32 creates its local configuration network:
 
-```text
-SSID : WEBUI_CONFIG
-IP   : 192.168.3.1
-mDNS : http://webui.local
-```
+| Setting | Default |
+|---|---|
+| **Wi-Fi SSID** | `WEBUI_CONFIG` |
+| **IP Address** | `192.168.3.1` |
+| **mDNS** | `http://webui.local` |
 
-Open:
+Connect your laptop, smartphone, or tablet to `WEBUI_CONFIG`, then open:
 
 ```text
 http://192.168.3.1
-```
-
-> Board configuration, UART pins, flash size and PSRAM settings depend on the selected PlatformIO environment.
-
-For complete setup instructions, see [Getting Started](docs/getting-started/README.md).
-
----
 
 ## Documentation
 
