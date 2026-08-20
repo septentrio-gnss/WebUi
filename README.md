@@ -551,10 +551,10 @@ WebUI was developed using **Dualy** as its primary reference implementation.
 
 Special thanks to:
 
-- **Ariel Kriss Sany** — WebUI collaboration, WebUI development, GNSS parsing, technical discussions and development support
-- **Adham Ali** — embedded validation, ESP32 firmware, WebUI validation, hardware testing and technical documentation
-- **Septentrio engineers and project reviewers** — GNSS expertise, receiver validation, hardware support and technical feedback
-- **Open-source maintainers** — for the networking, WebSocket, JSON and embedded-development libraries used by the project
+> - **Ariel Kriss Sany** — WebUI collaboration, WebUI development, GNSS parsing, technical discussions and development support
+> - **Adham Ali** — embedded validation, ESP32 firmware, WebUI validation, hardware testing and technical documentation
+> - **Septentrio engineers and project reviewers** — GNSS expertise, receiver validation, hardware support and technical feedback
+> - **Open-source maintainers** — for the networking, WebSocket, JSON and embedded-development libraries used by the project
 
 ---
 
